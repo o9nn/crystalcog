@@ -46,15 +46,28 @@ For detailed installation instructions, see: [docs/CRYSTAL_INSTALLATION.md](docs
 ```
 crystalcog/
 ├── src/                    # Crystal source code
-│   ├── cogutil/           # Core utilities
-│   ├── atomspace/         # AtomSpace implementation
+│   ├── cogutil/           # Core utilities (logging, config, random)
+│   ├── atomspace/         # AtomSpace hypergraph knowledge representation
 │   ├── pln/               # Probabilistic Logic Networks
 │   ├── ure/               # Unified Rule Engine
-│   └── opencog/           # Main OpenCog interface
-├── spec/                  # Test specifications
-├── scripts/               # Build and development scripts
-├── crystal-lang/          # Crystal installation resources
-└── docs/                  # Documentation
+│   ├── opencog/           # Main OpenCog reasoning interface
+│   ├── cogserver/         # Network server with REST API
+│   ├── pattern_matching/  # Advanced pattern matching engine
+│   ├── nlp/               # Natural language processing
+│   ├── moses/             # Evolutionary optimization
+│   ├── agent-zero/        # Distributed agent networks
+│   └── ...                # Additional components
+├── spec/                  # Formal test specifications (Crystal spec framework)
+├── examples/              # Example programs and demos
+│   ├── demos/            # Interactive demonstrations
+│   └── tests/            # Test programs and debugging utilities
+├── benchmarks/           # Performance benchmarking programs
+├── scripts/              # Build, deployment, and development scripts
+│   ├── validation/       # Validation and integration test scripts
+│   └── production/       # Production deployment scripts
+├── docs/                 # Comprehensive documentation
+│   └── INDEX.md         # Documentation index
+└── crystal-lang/         # Crystal installation resources
 ```
 
 ## Development
@@ -94,6 +107,32 @@ shards install
 
 ### Testing
 
+#### Running the Test Suite
+
+```bash
+# Run all formal specifications
+crystal spec
+
+# Run specific component specs
+crystal spec spec/atomspace/
+crystal spec spec/pln/
+crystal spec spec/cogutil/
+```
+
+#### Example Programs
+
+```bash
+# Run basic examples
+crystal run examples/tests/test_basic.cr
+crystal run examples/tests/test_pln.cr
+
+# Run demonstrations
+crystal run examples/demos/demo.cr
+crystal run examples/demos/demo_advanced_reasoning.cr
+
+# See examples/README.md for complete catalog
+```
+
 #### CogServer Integration Test
 
 The CogServer includes a comprehensive integration test that validates all network API functionality:
@@ -103,10 +142,10 @@ The CogServer includes a comprehensive integration test that validates all netwo
 crystal build src/cogserver/cogserver_main.cr -o cogserver_bin
 
 # Start CogServer for testing
-crystal run start_test_cogserver.cr &
+crystal run examples/tests/start_test_cogserver.cr &
 
 # Run integration test script
-./test_cogserver_integration.sh
+./scripts/validation/test_cogserver_integration.sh
 ```
 
 The integration test validates:
@@ -119,12 +158,15 @@ The integration test validates:
 #### Full Test Suite
 
 ```bash
-# Run all Crystal tests
+# Run all Crystal specs
 crystal spec
 
-# Run individual component tests
-crystal run test_cogserver_api.cr
-crystal run test_enhanced_api.cr
+# Run example test programs
+crystal run examples/tests/test_cogserver_api.cr
+crystal run examples/tests/test_enhanced_api.cr
+crystal run examples/tests/test_persistence.cr
+
+# See examples/README.md for all available test programs
 ```
 
 ## Components
@@ -266,16 +308,18 @@ CrystalCog is a complete Crystal language implementation with all functionality.
 
 ## Documentation
 
-For complete documentation:
+For complete documentation, see the [Documentation Index](docs/INDEX.md).
 
-- [Crystal Installation Guide](docs/CRYSTAL_INSTALLATION.md)
-- [Development Roadmap](DEVELOPMENT-ROADMAP.md)
-- [Persistence API Documentation](PERSISTENCE_API_DOCUMENTATION.md)
-- [Hypergraph State Persistence Documentation](HYPERGRAPH_STATE_PERSISTENCE_DOCUMENTATION.md)
-- [Advanced Pattern Matching Documentation](docs/ADVANCED_PATTERN_MATCHING.md)
-- [Complete API Documentation](README_COMPLETE.md)
-- [Agent-Zero Implementation](AGENT-ZERO-GENESIS.md)
-- [CI/CD Pipeline](docs/CI-CD-PIPELINE.md)
+**Key Documents:**
+- [Development Roadmap](docs/DEVELOPMENT-ROADMAP.md) - Project roadmap and implementation plan
+- [Crystal Installation Guide](docs/CRYSTAL_INSTALLATION.md) - Installation instructions
+- [API Documentation](docs/API_DOCUMENTATION.md) - Complete API reference
+- [Examples Guide](examples/README.md) - Example programs and usage
+- [Persistence API](docs/PERSISTENCE_API_DOCUMENTATION.md) - Storage backend documentation
+- [Advanced Pattern Matching](docs/ADVANCED_PATTERN_MATCHING.md) - Pattern matching guide
+- [PLN Reasoning](docs/PLN-REASONING-MODULE.md) - Probabilistic Logic Networks
+- [Production Deployment](docs/PRODUCTION_DEPLOYMENT.md) - Deployment guide
+- [Security Policy](docs/SECURITY.md) - Security and vulnerability reporting
 
 ## Contributing
 
