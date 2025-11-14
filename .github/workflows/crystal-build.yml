@@ -358,14 +358,14 @@ jobs:
       run: |
         echo "Running basic functionality tests..."
         
-        if [ -f "test_basic.cr" ]; then
+        if [ -f "examples/tests/test_basic.cr" ]; then
           echo "Running test_basic.cr..."
-          crystal run test_basic.cr || echo "Basic test failed"
+          crystal run examples/tests/test_basic.cr || echo "Basic test failed"
         fi
         
-        if [ -f "test_pln.cr" ]; then
+        if [ -f "examples/tests/test_pln.cr" ]; then
           echo "Running test_pln.cr..."
-          crystal run test_pln.cr || echo "PLN test failed"
+          crystal run examples/tests/test_pln.cr || echo "PLN test failed"
         fi
 
     - name: Upload build artifacts

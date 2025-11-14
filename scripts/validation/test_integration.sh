@@ -42,9 +42,9 @@ echo
 echo "3. Testing individual Crystal components..."
 
 test_files=(
-    "test_basic.cr"
-    "test_attention_simple.cr"
-    "test_pattern_matching.cr"
+    "examples/tests/test_basic.cr"
+    "examples/tests/test_attention_simple.cr"
+    "examples/tests/test_pattern_matching.cr"
 )
 
 for test_file in "${test_files[@]}"; do

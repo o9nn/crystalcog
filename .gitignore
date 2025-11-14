@@ -169,3 +169,9 @@ knowledge.scm
 knowledge.rocks
 state.scm
 /tmp/test_*/
+
+# Temporary and build directories
+.c2/
+.idx/
+profile/
+coverage-report.txt

@@ -156,27 +156,27 @@ jobs:
         echo "Running integration tests..."
         
         # Run basic functionality tests
-        if [ -f "test_basic.cr" ]; then
+        if [ -f "examples/tests/test_basic.cr" ]; then
           echo "Running test_basic.cr..."
-          crystal run --error-trace test_basic.cr
+          crystal run --error-trace examples/tests/test_basic.cr
         fi
         
         # Run PLN tests
-        if [ -f "test_pln.cr" ]; then
+        if [ -f "examples/tests/test_pln.cr" ]; then
           echo "Running test_pln.cr..."
-          crystal run --error-trace test_pln.cr
+          crystal run --error-trace examples/tests/test_pln.cr
         fi
         
         # Run pattern matching tests
-        if [ -f "test_pattern_matching.cr" ]; then
+        if [ -f "examples/tests/test_pattern_matching.cr" ]; then
           echo "Running test_pattern_matching.cr..."
-          crystal run --error-trace test_pattern_matching.cr
+          crystal run --error-trace examples/tests/test_pattern_matching.cr
         fi
         
         # Run CogServer API tests
-        if [ -f "test_cogserver_api.cr" ]; then
+        if [ -f "examples/tests/test_cogserver_api.cr" ]; then
           echo "Running test_cogserver_api.cr..."
-          crystal run --error-trace test_cogserver_api.cr
+          crystal run --error-trace examples/tests/test_cogserver_api.cr
         fi
 
     - name: Upload test results
