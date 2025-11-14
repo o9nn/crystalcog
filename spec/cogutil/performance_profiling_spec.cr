@@ -12,7 +12,9 @@ describe "Performance Profiling Tools" do
       session = CogUtil::PerformanceProfiler.end_session
       
       session.should_not be_nil
-      session.try(&.session_duration).should be > 0.0
+      if session
+        session.session_duration.should be > 0.0
+      end
     end
     
     it "profiles code blocks with timing metrics" do
@@ -297,9 +299,9 @@ describe "Performance Profiling Tools" do
       engine = CogUtil::OptimizationEngine.new
       roadmap = engine.get_optimization_roadmap(recommendations)
       
-      roadmap.should have_key("Phase 1: Quick Wins")
-      roadmap.should have_key("Phase 2: High Impact")
-      roadmap.should have_key("Phase 3: Systematic Improvements")
+      roadmap.has_key?("Phase 1: Quick Wins").should be_true
+      roadmap.has_key?("Phase 2: High Impact").should be_true
+      roadmap.has_key?("Phase 3: Systematic Improvements").should be_true
       
       # Quick win should be in Phase 1
       phase1 = roadmap["Phase 1: Quick Wins"]
@@ -321,10 +323,10 @@ describe "Performance Profiling Tools" do
       monitor.record_metric("test_metric", 45.0)
       
       summary = monitor.get_performance_summary
-      summary.should have_key("test_metric")
+      summary.has_key?("test_metric").should be_true
       
       metric_data = summary["test_metric"]
-      metric_data["current"].as_f64.should eq(45.0)
+      metric_data["current"].as_f.should eq(45.0)
     end
     
     it "manages alert rules" do
@@ -418,7 +420,7 @@ describe "Performance Profiling Tools" do
         
         # All steps should complete without errors
         recommendations.should be_a(Array(CogUtil::OptimizationEngine::Recommendation))
-        monitor.get_performance_summary.should have_key("integration_metric")
+        monitor.get_performance_summary.has_key?("integration_metric").should be_true
       end
     end
     
