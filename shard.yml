@@ -1,0 +1,65 @@
+name: crystalcog
+version: 0.1.0
+
+authors:
+  - OpenCog Community <opencog@googlegroups.com>
+
+crystal: 1.10.1
+
+license: AGPL-3.0
+
+description: |
+  Crystal language implementation of the OpenCog framework.
+  A complete rewrite of the OpenCog artificial intelligence system
+  in Crystal, providing better performance, memory safety, and maintainability.
+
+dependencies:
+  # Database and persistence
+  sqlite3:
+    github: crystal-lang/crystal-sqlite3
+  pg:
+    github: will/crystal-pg
+
+development_dependencies:
+
+targets:
+  crystalcog:
+    main: src/crystalcog.cr
+
+  # Core library components
+  cogutil_bin:
+    main: src/cogutil/cogutil.cr
+    
+  atomspace_bin:
+    main: src/atomspace/atomspace.cr
+    
+  opencog_bin:
+    main: src/opencog/opencog.cr
+  
+  # Pattern processing components  
+  pattern_matching:
+    main: src/pattern_matching/pattern_matching_main.cr
+    
+  pattern_mining:
+    main: src/pattern_mining/pattern_mining_main.cr
+    
+  nlp:
+    main: src/nlp/nlp_main.cr
+    
+  # Server applications
+  cogserver:
+    main: src/cogserver/cogserver_main.cr
+    
+  # Agent-Zero distributed networks
+  distributed_network_demo:
+    main: src/agent-zero/distributed_network_demo.cr
+    
+  # Command line tools
+  cogshell:
+    main: src/tools/cogshell.cr
+
+scripts:
+  build: crystal build src/crystalcog.cr
+  test: crystal spec
+  docs: crystal docs
+  benchmark: crystal run --release benchmarks/benchmark.cr
