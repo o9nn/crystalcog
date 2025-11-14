@@ -285,7 +285,7 @@ run_unit_tests() {
 run_integration_tests() {
     print_status "Running integration tests..."
     
-    local test_files=("test_basic.cr" "test_pln.cr" "test_pattern_matching.cr" "test_cogserver_api.cr")
+    local test_files=("examples/tests/test_basic.cr" "examples/tests/test_pln.cr" "examples/tests/test_pattern_matching.cr" "examples/tests/test_cogserver_api.cr")
     local passed=0
     local failed=0
     

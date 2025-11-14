@@ -264,10 +264,10 @@ jobs:
            - Use Crystal's built-in `spec` framework
            - Run with: `crystal spec`
         
-        2. **Integration Tests** (root `test_*.cr` files)
+        2. **Integration Tests** (`examples/tests/` directory)
            - Test component interactions
            - Validate end-to-end functionality
-           - Run individually: `crystal run test_basic.cr`
+           - Run individually: `crystal run examples/tests/test_basic.cr`
         
         3. **Performance Benchmarks** (`benchmarks/` directory)
            - Measure execution performance
