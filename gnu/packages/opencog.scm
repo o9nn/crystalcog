@@ -1,5 +1,8 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2024 CrystalCog Community
+;;; CrystalCog OpenCog Package Definitions
+;;; Copyright © 2025 CrystalCog Contributors
+;;; Copyright © 2024 OpenCog Community
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -21,6 +24,7 @@
   #:use-module (guix download)
   #:use-module (guix git-download)
   #:use-module (guix build-system cmake)
+  #:use-module (guix build-system crystal)
   #:use-module (guix build-system gnu)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (gnu packages)
@@ -84,6 +88,104 @@ and platform-specific utilities.")
        '("-DCMAKE_BUILD_TYPE=Release"
          "-DENABLE_GUILE=ON"
          "-DENABLE_PYTHON=ON")))
+  #:use-module (gnu packages cmake)
+  #:use-module (gnu packages gcc)
+  #:use-module (gnu packages guile)
+  #:use-module (guix git)
+  #:use-module (guix utils)
+  #:use-module (guix build-system crystal)
+  #:use-module ((guix licenses) #:prefix license:)
+  #:use-module (gnu packages)
+  #:use-module (gnu packages databases)
+  #:use-module (gnu packages pkg-config))
+
+(define-public crystalcog
+  (package
+    (name "crystalcog")
+    (version "0.1.0")
+    (source (local-file "../.." "crystalcog-checkout"
+                        #:recursive? #t
+                        #:select? (git-predicate "../..")))
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/cogpy/crystalcog")
+                    (commit "main")))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0000000000000000000000000000000000000000000000000000"))))
+    (build-system crystal-build-system)
+    (arguments
+     `(#:tests? #t
+       #:shards-file "shard.yml"))
+    (native-inputs
+     (list pkg-config))
+    (inputs
+     (list sqlite postgresql))
+    (synopsis "OpenCog artificial intelligence framework in Crystal")
+    (description
+     "CrystalCog is a comprehensive rewrite of the OpenCog artificial
+intelligence framework in the Crystal programming language.  It provides
+better performance, memory safety, and maintainability while preserving
+all the functionality of the original OpenCog system.
+
+Features include:
+@itemize
+@item AtomSpace hypergraph knowledge representation
+@item Probabilistic Logic Networks (PLN) reasoning
+@item Unified Rule Engine (URE)
+@item Pattern matching and mining
+@item Natural language processing
+@item Distributed agent systems
+@item Performance profiling and optimization tools
+@end itemize")
+    (home-page "https://github.com/cogpy/crystalcog")
+    (license license:agpl3+)))
+  #:use-module (gnu packages crystal)
+  #:use-module (gnu packages guile)
+  #:use-module (gnu packages maths)
+  #:use-module (gnu packages boost)
+  #:use-module (gnu packages pkg-config))
+
+;; Shared source definition for all CrystalCog packages
+(define crystalcog-source
+  (local-file "../.." "crystalcog-checkout"
+              #:recursive? #t
+              #:select? (git-predicate (dirname (dirname (current-filename))))))
+
+(define-public cogutil
+  (package
+    (name "cogutil")
+    (version "0.1.0")
+    (source crystalcog-source)
+    (build-system crystal-build-system)
+    (arguments
+     `(#:phases
+       (modify-phases %standard-phases
+         (add-after 'unpack 'configure
+           (lambda* (#:key inputs outputs #:allow-other-keys)
+             #t))
+         (replace 'build
+           (lambda _
+             (invoke "shards" "install")
+             (invoke "shards" "build" "--release")))
+         (replace 'check
+           (lambda _
+             (invoke "crystal" "spec")))
+         (replace 'install
+           (lambda* (#:key outputs #:allow-other-keys)
+             (let* ((out (assoc-ref outputs "out"))
+                    (bin (string-append out "/bin"))
+                    (lib (string-append out "/lib"))
+                    (share (string-append out "/share/crystalcog")))
+               (mkdir-p bin)
+               (mkdir-p lib)
+               (mkdir-p share)
+               (copy-recursively "bin" bin)
+               (copy-recursively "src" (string-append lib "/src"))
+               (copy-recursively "docs" (string-append share "/docs"))
+               #t))))))
     (native-inputs
      (list pkg-config))
     (inputs
@@ -187,6 +289,89 @@ pattern matching, natural language processing, and evolutionary optimization.")
     (license license:agpl3+)))
 
 ;; Guile bindings and extensions
+           guile-3.0
+           postgresql
+           sqlite))
+    (synopsis "Crystal language implementation of the OpenCog framework")
+    (description
+     "CrystalCog is a complete rewrite of the OpenCog artificial intelligence
+system in Crystal language.  It provides better performance, memory safety, and
+maintainability compared to the original C++/Python implementation.
+
+OpenCog is a framework for building artificial general intelligence (AGI)
+systems.  It includes:
+- AtomSpace: Knowledge representation and storage
+- PLN: Probabilistic Logic Networks for reasoning
+- URE: Unified Rule Engine for inference
+- Pattern Matcher: Complex pattern recognition
+- NLP: Natural language processing components
+- Distributed networking for multi-agent systems")
+         (replace 'build
+           (lambda _
+             (invoke "crystal" "build" "src/cogutil/cogutil.cr"))))))
+    (synopsis "CrystalCog core utilities library")
+    (description
+     "CogUtil provides core utilities for CrystalCog including logging,
+configuration management, random number generation, and platform utilities.
+This is a Crystal language reimplementation of the OpenCog cogutil library.")
+    (home-page "https://github.com/cogpy/crystalcog")
+    (license license:agpl3+)))
+
+(define-public atomspace
+  (package
+    (name "atomspace")
+    (version "0.1.0")
+    (source crystalcog-source)
+    (build-system crystal-build-system)
+    (arguments
+     `(#:phases
+       (modify-phases %standard-phases
+         (replace 'build
+           (lambda _
+             (invoke "crystal" "build" "src/atomspace/atomspace.cr")))
+         (replace 'check
+           (lambda _
+             (invoke "crystal" "spec" "spec/atomspace"))))))
+    (inputs
+     (list cogutil sqlite postgresql))
+    (synopsis "CrystalCog hypergraph knowledge representation")
+    (description
+     "AtomSpace is the hypergraph-based knowledge representation system for
+CrystalCog. It provides atoms (nodes and links), truth values, attention values,
+and a pattern matching query system. This is a Crystal language reimplementation
+of the OpenCog AtomSpace.")
+    (home-page "https://github.com/cogpy/crystalcog")
+    (license license:agpl3+)))
+
+(define-public opencog
+  ;; Alias for compatibility with existing manifests
+  crystalcog)
+  (package
+    (name "opencog")
+    (version "0.1.0")
+    (source crystalcog-source)
+    (build-system crystal-build-system)
+    (arguments
+     `(#:phases
+       (modify-phases %standard-phases
+         (replace 'build
+           (lambda _
+             (invoke "crystal" "build" "src/opencog/opencog.cr")))
+         (replace 'check
+           (lambda _
+             (invoke "crystal" "spec" "spec/"))))))
+    (inputs
+     (list atomspace cogutil guile-3.0 sqlite postgresql))
+    (synopsis "CrystalCog cognitive computing platform")
+    (description
+     "CrystalCog is a comprehensive cognitive computing platform implemented in
+Crystal language. It includes the AtomSpace hypergraph knowledge representation,
+Probabilistic Logic Networks (PLN), Unified Rule Engine (URE), pattern matching,
+natural language processing, and evolutionary optimization (MOSES). This is a
+complete reimplementation of the OpenCog framework in Crystal.")
+    (home-page "https://github.com/cogpy/crystalcog")
+    (license license:agpl3+)))
+
 (define-public guile-pln
   (package
     (name "guile-pln")
@@ -215,6 +400,21 @@ pattern matching, natural language processing, and evolutionary optimization.")
     (description
      "Guile-PLN provides Scheme bindings for the Probabilistic Logic Networks
 reasoning engine implemented in CrystalCog.")
+    (source crystalcog-source)
+    (build-system crystal-build-system)
+    (arguments
+     `(#:phases
+       (modify-phases %standard-phases
+         (replace 'build
+           (lambda _
+             (invoke "crystal" "build" "src/pln/pln.cr"))))))
+    (inputs
+     (list atomspace cogutil))
+    (synopsis "Probabilistic Logic Networks for CrystalCog")
+    (description
+     "PLN (Probabilistic Logic Networks) is an uncertain inference system for
+CrystalCog. It provides probabilistic reasoning capabilities including deduction,
+induction, abduction, and analogical reasoning.")
     (home-page "https://github.com/cogpy/crystalcog")
     (license license:agpl3+)))
 
@@ -246,6 +446,21 @@ reasoning engine implemented in CrystalCog.")
     (description
      "Guile-ECAN provides Scheme bindings for the Economic Attention Networks
 attention allocation system implemented in CrystalCog.")
+    (source crystalcog-source)
+    (build-system crystal-build-system)
+    (arguments
+     `(#:phases
+       (modify-phases %standard-phases
+         (replace 'build
+           (lambda _
+             (invoke "crystal" "build" "src/attention/attention.cr"))))))
+    (inputs
+     (list atomspace cogutil))
+    (synopsis "Economic Attention Networks for CrystalCog")
+    (description
+     "ECAN (Economic Attention Networks) implements attention allocation
+mechanisms for CrystalCog, managing computational resources and focusing
+cognitive processing on important knowledge.")
     (home-page "https://github.com/cogpy/crystalcog")
     (license license:agpl3+)))
 
@@ -277,6 +492,20 @@ attention allocation system implemented in CrystalCog.")
     (description
      "Guile-MOSES provides Scheme bindings for the Meta-Optimizing Semantic
 Evolutionary Search framework implemented in CrystalCog.")
+    (source crystalcog-source)
+    (build-system crystal-build-system)
+    (arguments
+     `(#:phases
+       (modify-phases %standard-phases
+         (replace 'build
+           (lambda _
+             (invoke "crystal" "build" "src/moses/moses.cr"))))))
+    (inputs
+     (list atomspace cogutil))
+    (synopsis "Meta-Optimizing Semantic Evolutionary Search")
+    (description
+     "MOSES is an evolutionary program learning system for CrystalCog that
+uses genetic programming techniques to evolve programs that solve problems.")
     (home-page "https://github.com/cogpy/crystalcog")
     (license license:agpl3+)))
 
@@ -308,6 +537,20 @@ Evolutionary Search framework implemented in CrystalCog.")
     (description
      "Guile-Pattern-Matcher provides Scheme bindings for the advanced pattern
 matching and mining capabilities implemented in CrystalCog.")
+    (source crystalcog-source)
+    (build-system crystal-build-system)
+    (arguments
+     `(#:phases
+       (modify-phases %standard-phases
+         (replace 'build
+           (lambda _
+             (invoke "crystal" "build" "src/pattern_matching/pattern_matching_main.cr"))))))
+    (inputs
+     (list atomspace cogutil))
+    (synopsis "Advanced pattern matching engine for CrystalCog")
+    (description
+     "Pattern matching engine for CrystalCog providing sophisticated graph
+pattern recognition and query capabilities for the AtomSpace hypergraph.")
     (home-page "https://github.com/cogpy/crystalcog")
     (license license:agpl3+)))
 
@@ -339,6 +582,20 @@ matching and mining capabilities implemented in CrystalCog.")
     (description
      "Guile-RelEx provides Scheme bindings for the relationship extraction
 and natural language processing capabilities implemented in CrystalCog.")
+    (source crystalcog-source)
+    (build-system crystal-build-system)
+    (arguments
+     `(#:phases
+       (modify-phases %standard-phases
+         (replace 'build
+           (lambda _
+             (invoke "crystal" "build" "src/nlp/nlp_main.cr"))))))
+    (inputs
+     (list atomspace cogutil))
+    (synopsis "Natural language processing for CrystalCog")
+    (description
+     "RelEx provides relationship extraction and natural language processing
+capabilities for CrystalCog, enabling semantic understanding of text.")
     (home-page "https://github.com/cogpy/crystalcog")
     (license license:agpl3+)))
 
@@ -367,3 +624,53 @@ inference on CPU.  It provides low-level building blocks for neural networks
 and is used for ML integration in CrystalCog.")
     (home-page "https://github.com/ggerganov/ggml")
     (license license:expat)))
+    (source crystalcog-source)
+    (build-system crystal-build-system)
+    (arguments
+     `(#:phases
+       (modify-phases %standard-phases
+         (replace 'build
+           (lambda _
+             (invoke "crystal" "build" "src/ggml/ggml_bindings.cr"))))))
+    (inputs
+     (list atomspace cogutil))
+    (synopsis "GGML tensor library bindings for CrystalCog")
+    (description
+     "GGML bindings provide efficient tensor operations and machine learning
+capabilities for CrystalCog, enabling neural-symbolic integration.")
+    (home-page "https://github.com/cogpy/crystalcog")
+    (license license:agpl3+)))
+;;; Copyright © 2024 OpenCog Community <opencog@googlegroups.com>
+;;;
+;;; This file is part of CrystalCog.
+;;;
+;;; CrystalCog is free software; you can redistribute it and/or modify it
+;;; under the terms of the GNU Affero General Public License as published by
+;;; the Free Software Foundation; either version 3 of the License, or (at
+;;; your option) any later version.
+;;;
+;;; CrystalCog is distributed in the hope that it will be useful, but
+;;; WITHOUT ANY WARRANTY; without even the implied warranty of
+;;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;;; GNU Affero General Public License for more details.
+;;;
+;;; You should have received a copy of the GNU Affero General Public License
+;;; along with CrystalCog.  If not, see <http://www.gnu.org/licenses/>.
+
+;;; Compatibility module for OpenCog package names
+;;; This module re-exports CrystalCog packages with OpenCog-compatible names
+
+(define-module (gnu packages opencog)
+  #:use-module (gnu packages crystalcog)
+  #:export (crystalcog
+            crystalcog-cogutil
+            crystalcog-atomspace
+            crystalcog-opencog))
+
+;; Re-export CrystalCog packages for compatibility
+;; This allows the validation script and existing documentation to work
+;; without changes while maintaining the actual package definitions in
+;; crystalcog.scm
+
+;; The main packages are defined in (gnu packages crystalcog)
+;; and re-exported here for backward compatibility with OpenCog naming
