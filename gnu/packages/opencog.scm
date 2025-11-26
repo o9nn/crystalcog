@@ -1,4 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
+;;; Copyright © 2025 CrystalCog Contributors
 ;;; Copyright © 2024 OpenCog Community
 ;;;
 ;;; This file is part of GNU Guix.
@@ -26,6 +27,48 @@
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (gnu packages)
   #:use-module (gnu packages databases)
+  #:use-module (gnu packages pkg-config))
+
+(define-public crystalcog
+  (package
+    (name "crystalcog")
+    (version "0.1.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/cogpy/crystalcog")
+                    (commit "main")))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0000000000000000000000000000000000000000000000000000"))))
+    (build-system crystal-build-system)
+    (arguments
+     `(#:tests? #t
+       #:shards-file "shard.yml"))
+    (native-inputs
+     (list pkg-config))
+    (inputs
+     (list sqlite postgresql))
+    (synopsis "OpenCog artificial intelligence framework in Crystal")
+    (description
+     "CrystalCog is a comprehensive rewrite of the OpenCog artificial
+intelligence framework in the Crystal programming language.  It provides
+better performance, memory safety, and maintainability while preserving
+all the functionality of the original OpenCog system.
+
+Features include:
+@itemize
+@item AtomSpace hypergraph knowledge representation
+@item Probabilistic Logic Networks (PLN) reasoning
+@item Unified Rule Engine (URE)
+@item Pattern matching and mining
+@item Natural language processing
+@item Distributed agent systems
+@item Performance profiling and optimization tools
+@end itemize")
+    (home-page "https://github.com/cogpy/crystalcog")
+    (license license:agpl3+)))
   #:use-module (gnu packages crystal)
   #:use-module (gnu packages guile)
   #:use-module (gnu packages maths)
