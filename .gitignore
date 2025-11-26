@@ -368,6 +368,7 @@ crystalcog
 cogutil_lib
 opencog_lib
 atomspace_lib
+*_bin
 cogutil_bin
 atomspace_bin
 opencog_bin
