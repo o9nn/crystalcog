@@ -8,7 +8,10 @@ PROFILER_CR="$SCRIPT_DIR/profiler.cr"
 # Check if Crystal is installed
 if ! command -v crystal &> /dev/null; then
     echo "Error: Crystal is not installed. Please install Crystal first."
-    echo "Run: ./scripts/install-crystal.sh"
+    echo "Visit: https://crystal-lang.org/install/"
+    if [ -f "./scripts/install-crystal.sh" ]; then
+        echo "Or run: ./scripts/install-crystal.sh"
+    fi
     exit 1
 fi
 

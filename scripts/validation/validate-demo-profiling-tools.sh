@@ -94,7 +94,15 @@ fi
 
 # Test 5: Verify line count calculations
 echo -e "\n${YELLOW}Test 5:${NC} Verifying line count accuracy..."
-for file in src/cogutil/performance_profiler.cr src/cogutil/performance_regression.cr src/cogutil/optimization_engine.cr src/cogutil/performance_monitor.cr src/cogutil/profiling_cli.cr; do
+PROFILING_FILES=(
+    "src/cogutil/performance_profiler.cr"
+    "src/cogutil/performance_regression.cr"
+    "src/cogutil/optimization_engine.cr"
+    "src/cogutil/performance_monitor.cr"
+    "src/cogutil/profiling_cli.cr"
+)
+
+for file in "${PROFILING_FILES[@]}"; do
     if [ -f "$file" ]; then
         lines=$(wc -l < "$file")
         echo -e "  ${GREEN}✅${NC} $(basename "$file"): $lines lines"
@@ -113,7 +121,7 @@ fi
 
 # Test 7: Verify shard.yml has profiler target
 echo -e "\n${YELLOW}Test 7:${NC} Checking shard.yml for profiler target..."
-if grep -q "profiler:" shard.yml; then
+if grep -q '^[[:space:]]*profiler:' shard.yml; then
     echo -e "${GREEN}✅ profiler target found in shard.yml${NC}"
 else
     echo -e "${YELLOW}⚠️  profiler target not found in shard.yml${NC}"
