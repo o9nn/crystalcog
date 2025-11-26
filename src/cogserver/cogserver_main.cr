@@ -92,5 +92,7 @@ end
 # to execute while still being importable as a library.
 # Alternative check could be: !PROGRAM_NAME.ends_with?(".cr")
 unless PROGRAM_NAME.includes?("crystal-run") || PROGRAM_NAME.ends_with?(".cr")
+# Run if this file is executed directly or compiled as cogserver binary
+if PROGRAM_NAME == __FILE__ || PROGRAM_NAME.ends_with?("cogserver")
   CogServer.main
 end
