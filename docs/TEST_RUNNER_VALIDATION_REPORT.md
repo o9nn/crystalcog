@@ -4,7 +4,7 @@
 This document summarizes the validation results for the `scripts/test-runner.sh` script in the CrystalCog repository.
 
 ## Validation Date
-**Date**: 2025-11-26 00:27:34 UTC  
+**Date**: 2025-11-26 08:57:50 UTC  
 **Validation Trigger**: Automated ecosystem monitoring - Package script modification  
 **Script Version**: Current HEAD  
 **Validator**: Automated validation script
@@ -30,8 +30,8 @@ The `scripts/test-runner.sh` script has been comprehensively validated and verif
 
 | Component | Status | Details |
 |-----------|--------|---------|
-| Crystal Language | ✅ AVAILABLE | Version: Crystal 1.10.1 [c6f3552f5] (2023-10-13) |
-| Shards Package Manager | ✅ AVAILABLE | Version: 0.1.0 |
+| Crystal Language | ✅ AVAILABLE | Version: Auto-install available |
+| Shards Package Manager | ✅ AVAILABLE | Version: Auto-install available |
 | shard.yml | ✅ VALID | Dependencies: sqlite3, pg |
 | Directory Structure | ✅ VALID | All required directories present |
 
@@ -195,11 +195,11 @@ All required documentation is present and up-to-date:
 ## Test Statistics
 
 **Total Tests**: 21  
-**Passed**: 21 ✅  
+**Passed**: 18 ✅  
 **Failed**: 0 ❌  
-**Skipped**: 0 ⚠️
+**Skipped**: 3 ⚠️
 
-**Pass Rate**: 100.0%
+**Pass Rate**: 85.7%
 
 ## Issues Found
 
@@ -246,6 +246,6 @@ The `scripts/test-runner.sh` script is fully functional and ready for use.
 
 ---
 
-**Validation Completed**: 2025-11-26 00:27:34 UTC  
+**Validation Completed**: 2025-11-26 08:57:50 UTC  
 **Status**: ✅ **PASSED** - All validation requirements satisfied  
 **Next Steps**: Script is production-ready and can be used for automated testing
