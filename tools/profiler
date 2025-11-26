@@ -16,4 +16,14 @@ fi
 
 # Run the profiling CLI using Crystal
 cd "$PROJECT_ROOT"
-exec crystal run src/cogutil/profiling_cli.cr -- "$@"
+if ! crystal run src/cogutil/profiling_cli.cr -- "$@" 2>&1; then
+    echo ""
+    echo "Error: Failed to execute profiling CLI"
+    echo "This could be due to:"
+    echo "  - Missing dependencies (run: shards install)"
+    echo "  - Syntax errors in the Crystal code"
+    echo "  - Incompatible Crystal version (expected: 1.10.1)"
+    echo ""
+    echo "For more information, see docs/PERFORMANCE_PROFILING_GUIDE.md"
+    exit 1
+fi

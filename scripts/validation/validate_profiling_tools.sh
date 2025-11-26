@@ -73,17 +73,20 @@ echo ""
 
 # Validate script execution
 echo "🚀 Running demo_profiling_tools.sh..."
-if ./scripts/demo_profiling_tools.sh > /tmp/demo_output.txt 2>&1; then
+TEMP_OUTPUT=$(mktemp)
+trap 'rm -f "$TEMP_OUTPUT"' EXIT
+
+if ./scripts/demo_profiling_tools.sh > "$TEMP_OUTPUT" 2>&1; then
     print_success "demo_profiling_tools.sh executed successfully"
     
     # Check output contains expected sections
-    if grep -q "📁 Files created:" /tmp/demo_output.txt; then
+    if grep -q "📁 Files created:" "$TEMP_OUTPUT"; then
         print_success "Output contains 'Files created' section"
     else
         print_error "Output missing 'Files created' section"
     fi
     
-    if grep -q "📏 Implementation Statistics:" /tmp/demo_output.txt; then
+    if grep -q "📏 Implementation Statistics:" "$TEMP_OUTPUT"; then
         print_success "Output contains 'Implementation Statistics' section"
     else
         print_error "Output missing 'Implementation Statistics' section"
@@ -100,11 +103,21 @@ if command -v crystal &> /dev/null; then
     print_success "Crystal is installed: $(crystal version | head -n1)"
     
     # Check syntax of key files
+    TEMP_ERRORS=$(mktemp)
+    trap 'rm -f "$TEMP_ERRORS"' EXIT
+    
     for file in src/cogutil/performance_profiler.cr src/cogutil/profiling_cli.cr; do
-        if crystal build --no-codegen "$file" 2>/dev/null; then
+        if crystal build --no-codegen "$file" 2>"$TEMP_ERRORS"; then
             print_success "$file has valid Crystal syntax"
         else
-            print_warning "$file may have syntax issues (detailed check needs dependencies)"
+            if [ -s "$TEMP_ERRORS" ]; then
+                print_warning "$file may have syntax issues:"
+                head -5 "$TEMP_ERRORS" | while IFS= read -r line; do
+                    echo "    $line"
+                done
+            else
+                print_warning "$file may have syntax issues (detailed check needs dependencies)"
+            fi
         fi
     done
 else
