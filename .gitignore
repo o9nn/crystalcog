@@ -129,6 +129,16 @@ crystalcog
 cogutil_lib
 opencog_lib
 atomspace_lib
+cogutil_bin
+atomspace_bin
+opencog_bin
+pattern_matching
+pattern_mining
+nlp
+cogserver
+distributed_network_demo
+cogshell
+cogserver_bin
 bin/
 *.o
 *.a
@@ -175,3 +185,4 @@ state.scm
 .idx/
 profile/
 coverage-report.txt
+cogserver_bin

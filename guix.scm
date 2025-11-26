@@ -9,26 +9,25 @@
              (gnu packages cmake)
              (gnu packages gcc)
              (gnu packages opencog))
+             (gnu packages crystalcog)
+             (gnu packages crystal)
+             (gnu packages databases)
+             (gnu packages pkg-config))
 
 (packages->manifest
   (list
-    ;; Core Guile
-    guile-3.0
-    guile-lib
+    ;; Core Crystal
+    crystal
     
     ;; Build tools
-    cmake
-    gcc-toolchain
     pkg-config
     
-    ;; Cognitive packages
-    opencog
-    ggml
-    guile-pln
-    guile-ecan
-    guile-moses
-    guile-pattern-matcher
-    guile-relex
+    ;; CrystalCog packages
+    crystalcog
+    crystalcog-cogutil
+    crystalcog-atomspace
+    crystalcog-opencog
     
-    ;; Math and scientific computing
-    boost))
+    ;; Database backends
+    sqlite
+    postgresql))
