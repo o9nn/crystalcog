@@ -62,7 +62,8 @@ if [ -f "cogserver_bin" ]; then
 fi
 
 # Build without RocksDB for now (can be enabled if librocksdb-dev is installed)
-if DISABLE_ROCKSDB=1 crystal build --error-trace src/cogserver/cogserver_main.cr -o cogserver_bin 2>&1 | grep -i error; then
+print_status "Building with DISABLE_ROCKSDB=1..."
+if ! DISABLE_ROCKSDB=1 crystal build --error-trace src/cogserver/cogserver_main.cr -o cogserver_bin 2>&1; then
     print_error "Build failed"
     exit 1
 fi
