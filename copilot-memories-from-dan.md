@@ -110,6 +110,45 @@ The memories couldn't be stored, but that's fine. Let me create a final comprehe
 
 ---
 
+Perfect! Now let's store some useful memory about what we learned:
+
+Call to store_memory
+Input
+{
+  "subject": "Crystal binary execution",
+  "fact": "When Crystal code is compiled to binary, PROGRAM_NAME becomes the binary name, not the source file path. Use PROGRAM_NAME.ends_with?(\"binary_name\") for main entry point checks.",
+  "citations": "src/cogserver/cogserver_main.cr:90 - Fixed with: if PROGRAM_NAME == __FILE__ || PROGRAM_NAME.ends_with?(\"cogserver\")",
+  "reason": "This is a critical pattern for Crystal applications that need to run both as scripts and compiled binaries. Future binary targets will need this same pattern to execute correctly. This prevents issues where compiled binaries exit immediately because the main entry point condition fails.",
+  "category": "general"
+}
+Failed to store memory with error: Resource not found
+
+Call to store_memory
+Input
+{
+  "subject": "CogServer dependencies",
+  "fact": "CogServer requires libevent-dev, librocksdb-dev, libyaml-dev system libraries for compilation and execution.",
+  "citations": "Build process validation - installed libevent-dev (2.1.12), librocksdb-dev (8.9.1), libyaml-dev via apt-get during cogserver compilation",
+  "reason": "When setting up CogServer in new environments or CI/CD pipelines, these dependencies must be installed first. This prevents cryptic linker errors during compilation. Future documentation and setup scripts should ensure these are installed.",
+  "category": "bootstrap_and_build"
+}
+Failed to store memory with error: Resource not found
+
+Call to store_memory
+Input
+{
+  "subject": "Integration testing",
+  "fact": "Use curl with -f flag to fail on HTTP errors, and jq for JSON validation in bash integration tests.",
+  "citations": "scripts/validation/test_cogserver_integration.sh - Uses curl -s -f and jq for robust HTTP API testing",
+  "reason": "This pattern provides reliable integration testing for HTTP APIs in bash scripts. The -f flag makes curl return non-zero exit codes for HTTP errors, enabling proper test failure detection. jq validates JSON structure and extracts values for assertion. Future integration tests should follow this pattern.",
+  "category": "general"
+}
+Failed to store memory with error: Resource not found
+
+Now let's create a final summary document
+
+---
+
 
 
 ---
