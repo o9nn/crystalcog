@@ -31,6 +31,8 @@
               (file-name (git-file-name name version))
               (sha256
                (base32
+                ;; TODO: Update with actual hash when v0.1.0 release is tagged
+                ;; Use: guix hash -rx /path/to/crystalcog
                 "0000000000000000000000000000000000000000000000000000"))))
     (build-system crystal-build-system)
     (arguments
@@ -77,6 +79,8 @@ the functionality of the original OpenCog system.  The framework includes:
               (file-name (git-file-name name version))
               (sha256
                (base32
+                ;; TODO: Update with actual hash when v0.1.0 release is tagged
+                ;; Use: guix hash -rx /path/to/crystalcog
                 "0000000000000000000000000000000000000000000000000000"))))
     (build-system crystal-build-system)
     (native-inputs
@@ -100,6 +104,8 @@ including logging, configuration management, and platform utilities.")
               (file-name (git-file-name name version))
               (sha256
                (base32
+                ;; TODO: Update with actual hash when v0.1.0 release is tagged
+                ;; Use: guix hash -rx /path/to/crystalcog
                 "0000000000000000000000000000000000000000000000000000"))))
     (build-system crystal-build-system)
     (native-inputs

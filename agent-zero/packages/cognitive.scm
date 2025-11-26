@@ -9,6 +9,8 @@
   #:use-module (guix download)
   #:use-module (guix git-download)
   #:use-module (guix build-system crystal)
+  #:use-module (guix build-system guile)
+  #:use-module (guix build-system gnu)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (gnu packages)
   #:use-module (gnu packages crystal)
@@ -33,6 +35,8 @@
               (file-name (git-file-name name version))
               (sha256
                (base32
+                ;; TODO: Update with actual hash when using a specific commit
+                ;; Use: guix hash -rx /path/to/ggml
                 "0000000000000000000000000000000000000000000000000000"))))
     (build-system gnu-build-system)
     (synopsis "Tensor library for machine learning")
@@ -55,6 +59,8 @@ Transformer models, optimized for inference on commodity hardware.")
               (file-name (git-file-name name version))
               (sha256
                (base32
+                ;; TODO: Update with actual hash when v0.1.0 release is tagged
+                ;; Use: guix hash -rx /path/to/crystalcog
                 "0000000000000000000000000000000000000000000000000000"))))
     (build-system guile-build-system)
     (native-inputs
@@ -81,6 +87,8 @@ Scheme-based access to probabilistic inference and reasoning.")
               (file-name (git-file-name name version))
               (sha256
                (base32
+                ;; TODO: Update with actual hash when v0.1.0 release is tagged
+                ;; Use: guix hash -rx /path/to/crystalcog
                 "0000000000000000000000000000000000000000000000000000"))))
     (build-system guile-build-system)
     (native-inputs
@@ -107,6 +115,8 @@ implementing economic models of cognitive resource management.")
               (file-name (git-file-name name version))
               (sha256
                (base32
+                ;; TODO: Update with actual hash when v0.1.0 release is tagged
+                ;; Use: guix hash -rx /path/to/crystalcog
                 "0000000000000000000000000000000000000000000000000000"))))
     (build-system guile-build-system)
     (native-inputs
@@ -133,6 +143,8 @@ Evolutionary Search) framework for program learning.")
               (file-name (git-file-name name version))
               (sha256
                (base32
+                ;; TODO: Update with actual hash when v0.1.0 release is tagged
+                ;; Use: guix hash -rx /path/to/crystalcog
                 "0000000000000000000000000000000000000000000000000000"))))
     (build-system guile-build-system)
     (native-inputs
@@ -159,6 +171,8 @@ providing Scheme-based access to hypergraph pattern queries.")
               (file-name (git-file-name name version))
               (sha256
                (base32
+                ;; TODO: Update with actual hash when v0.1.0 release is tagged
+                ;; Use: guix hash -rx /path/to/crystalcog
                 "0000000000000000000000000000000000000000000000000000"))))
     (build-system guile-build-system)
     (native-inputs
