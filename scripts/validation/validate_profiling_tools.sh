@@ -78,13 +78,13 @@ echo ""
 
 # Validate script execution
 echo "🚀 Running demo_profiling_tools.sh..."
-TEMP_OUTPUT=$(mktemp -t validation_output.XXXXXX)
-TEMP_ERRORS=$(mktemp -t validation_errors.XXXXXX)
+TEMP_OUTPUT=$(mktemp -t profiling_validation_output.XXXXXX)
+TEMP_ERRORS=$(mktemp -t profiling_validation_errors.XXXXXX)
 trap 'rm -f "$TEMP_OUTPUT" "$TEMP_ERRORS"' EXIT
 
 # Capture combined output for validation (stdout and stderr together is intentional,
 # as we want to verify the complete output including any warnings or messages).
-if ./scripts/demo_profiling_tools.sh > "$TEMP_OUTPUT" 2>&1; then
+if "$PROJECT_ROOT/scripts/demo_profiling_tools.sh" > "$TEMP_OUTPUT" 2>&1; then
     print_success "demo_profiling_tools.sh executed successfully"
     
     # Check output contains expected sections
@@ -114,7 +114,8 @@ if command -v crystal &> /dev/null; then
     ERROR_INDENT="    "
     
     # Check syntax of key profiling files
-    # Note: We validate the core profiling files that are most likely to be modified
+    # Note: We validate the core profiling files that are most likely to be modified.
+    # This may fail if dependencies haven't been installed (shards install).
     SYNTAX_CHECK_FILES=(
         "src/cogutil/performance_profiler.cr"
         "src/cogutil/profiling_cli.cr"
@@ -126,8 +127,13 @@ if command -v crystal &> /dev/null; then
             print_success "$file has valid Crystal syntax"
         else
             if [ -s "$TEMP_ERRORS" ]; then
-                print_warning "$file may have syntax issues:"
-                sed "s/^/$ERROR_INDENT/" < "$TEMP_ERRORS" | head -5
+                # Check if error is due to missing dependencies
+                if grep -q "can't find file" "$TEMP_ERRORS" || grep -q "Error while requiring" "$TEMP_ERRORS"; then
+                    print_warning "$file syntax check skipped (run 'shards install' for full validation)"
+                else
+                    print_warning "$file may have syntax issues:"
+                    sed "s/^/$ERROR_INDENT/" < "$TEMP_ERRORS" | head -5
+                fi
             else
                 print_warning "$file may have syntax issues (detailed check needs dependencies)"
             fi

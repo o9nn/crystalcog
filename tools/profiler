@@ -10,7 +10,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Check if Crystal is installed
 if ! command -v crystal &> /dev/null; then
     echo "Error: Crystal is not installed or not in PATH" >&2
-    echo "Please run: ./scripts/install-crystal.sh" >&2
+    echo "Please run: $PROJECT_ROOT/scripts/install-crystal.sh" >&2
     exit 1
 fi
 
