@@ -179,10 +179,10 @@ if command -v guile >/dev/null 2>&1; then
         track_result "error" "✗ Guix manifest has syntax errors"
     fi
     
-    if guile -c "(use-modules (gnu packages opencog))" >/dev/null 2>&1; then
-        track_result "success" "✓ OpenCog package module syntax is valid"
+    if guile -c "(add-to-load-path \".\") (use-modules (gnu packages crystalcog))" >/dev/null 2>&1; then
+        track_result "success" "✓ CrystalCog package module syntax is valid"
     else
-        track_result "warning" "⚠ OpenCog package module has syntax issues"
+        track_result "warning" "⚠ CrystalCog package module validation requires full Guix installation"
     fi
 else
     track_result "warning" "⚠ Guile not available, skipping Guix syntax validation"
