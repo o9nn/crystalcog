@@ -16,14 +16,15 @@ fi
 
 # Run the profiling CLI using Crystal
 cd "$PROJECT_ROOT"
-if ! crystal run src/cogutil/profiling_cli.cr -- "$@" 2>&1; then
-    echo ""
-    echo "Error: Failed to execute profiling CLI"
-    echo "This could be due to:"
-    echo "  - Missing dependencies (run: shards install)"
-    echo "  - Syntax errors in the Crystal code"
-    echo "  - Incompatible Crystal version (expected: 1.10.1)"
-    echo ""
-    echo "For more information, see docs/PERFORMANCE_PROFILING_GUIDE.md"
-    exit 1
+if ! crystal run src/cogutil/profiling_cli.cr -- "$@"; then
+    EXIT_CODE=$?
+    echo "" >&2
+    echo "Error: Failed to execute profiling CLI (exit code: $EXIT_CODE)" >&2
+    echo "This could be due to:" >&2
+    echo "  - Missing dependencies (run: shards install)" >&2
+    echo "  - Syntax errors in the Crystal code" >&2
+    echo "  - Incompatible Crystal version (expected: 1.10.1)" >&2
+    echo "" >&2
+    echo "For more information, see docs/PERFORMANCE_PROFILING_GUIDE.md" >&2
+    exit $EXIT_CODE
 fi

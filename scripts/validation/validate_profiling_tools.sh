@@ -74,7 +74,8 @@ echo ""
 # Validate script execution
 echo "🚀 Running demo_profiling_tools.sh..."
 TEMP_OUTPUT=$(mktemp)
-trap 'rm -f "$TEMP_OUTPUT"' EXIT
+TEMP_ERRORS=$(mktemp)
+trap 'rm -f "$TEMP_OUTPUT" "$TEMP_ERRORS"' EXIT
 
 if ./scripts/demo_profiling_tools.sh > "$TEMP_OUTPUT" 2>&1; then
     print_success "demo_profiling_tools.sh executed successfully"
@@ -103,18 +104,13 @@ if command -v crystal &> /dev/null; then
     print_success "Crystal is installed: $(crystal version | head -n1)"
     
     # Check syntax of key files
-    TEMP_ERRORS=$(mktemp)
-    trap 'rm -f "$TEMP_ERRORS"' EXIT
-    
     for file in src/cogutil/performance_profiler.cr src/cogutil/profiling_cli.cr; do
         if crystal build --no-codegen "$file" 2>"$TEMP_ERRORS"; then
             print_success "$file has valid Crystal syntax"
         else
             if [ -s "$TEMP_ERRORS" ]; then
                 print_warning "$file may have syntax issues:"
-                head -5 "$TEMP_ERRORS" | while IFS= read -r line; do
-                    echo "    $line"
-                done
+                sed 's/^/    /' < "$TEMP_ERRORS" | head -5
             else
                 print_warning "$file may have syntax issues (detailed check needs dependencies)"
             fi
