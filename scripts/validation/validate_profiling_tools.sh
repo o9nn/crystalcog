@@ -4,6 +4,11 @@
 
 set -e
 
+# Ensure script is run from project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$PROJECT_ROOT"
+
 echo "🔍 CrystalCog Profiling Tools Validation Script"
 echo "================================================"
 echo ""
@@ -73,8 +78,8 @@ echo ""
 
 # Validate script execution
 echo "🚀 Running demo_profiling_tools.sh..."
-TEMP_OUTPUT=$(mktemp)
-TEMP_ERRORS=$(mktemp)
+TEMP_OUTPUT=$(mktemp -t validation_output.XXXXXX)
+TEMP_ERRORS=$(mktemp -t validation_errors.XXXXXX)
 trap 'rm -f "$TEMP_OUTPUT" "$TEMP_ERRORS"' EXIT
 
 # Capture combined output for validation (stdout and stderr together is intentional,
