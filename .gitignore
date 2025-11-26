@@ -130,6 +130,8 @@ cogutil_lib
 opencog_lib
 atomspace_lib
 bin/
+*_bin
+test
 *.o
 *.a
 
