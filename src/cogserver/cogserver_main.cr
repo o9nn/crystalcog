@@ -87,8 +87,10 @@ module CogServer
 end
 
 # Run if this file is the main program
-# Note: When built as an executable, PROGRAM_NAME will be the binary path,
-# not the source file path, so we need to check differently
-unless PROGRAM_NAME.includes?("crystal-run")
+# Note: When built as an executable, we check if PROGRAM_NAME does not contain
+# "crystal-run" which is used by `crystal run` command. This allows the binary
+# to execute while still being importable as a library.
+# Alternative check could be: !PROGRAM_NAME.ends_with?(".cr")
+unless PROGRAM_NAME.includes?("crystal-run") || PROGRAM_NAME.ends_with?(".cr")
   CogServer.main
 end
