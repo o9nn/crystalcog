@@ -16,8 +16,10 @@ fi
 
 # Run the profiling CLI using Crystal
 cd "$PROJECT_ROOT"
-if ! crystal run src/cogutil/profiling_cli.cr -- "$@"; then
-    EXIT_CODE=$?
+crystal run src/cogutil/profiling_cli.cr -- "$@"
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -ne 0 ]; then
     echo "" >&2
     echo "Error: Failed to execute profiling CLI (exit code: $EXIT_CODE)" >&2
     echo "This could be due to:" >&2

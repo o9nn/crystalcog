@@ -77,6 +77,8 @@ TEMP_OUTPUT=$(mktemp)
 TEMP_ERRORS=$(mktemp)
 trap 'rm -f "$TEMP_OUTPUT" "$TEMP_ERRORS"' EXIT
 
+# Capture combined output for validation (stdout and stderr together is intentional
+# as we want to verify the complete output including any warnings or messages)
 if ./scripts/demo_profiling_tools.sh > "$TEMP_OUTPUT" 2>&1; then
     print_success "demo_profiling_tools.sh executed successfully"
     
