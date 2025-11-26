@@ -29,7 +29,7 @@
     (version "0.1.0")
     (source (local-file "../.." "crystalcog-checkout"
                         #:recursive? #t
-                        #:select? (git-predicate (dirname (current-filename)))))
+                        #:select? (git-predicate "../..")))
     (build-system crystal-build-system)
     (arguments
      `(#:phases

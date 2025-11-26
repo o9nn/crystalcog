@@ -19,9 +19,12 @@
 
 ;; Re-export opencog package as defined in gnu/packages/opencog.scm
 (define-public opencog
-  (@@ (gnu packages opencog) opencog))
+  (@ (gnu packages opencog) crystalcog))
 
 ;; GGML - Machine learning library
+;; Note: This is a placeholder package definition for development
+;; In production, update the commit hash to a specific version and
+;; calculate the correct SHA256 hash using: guix download <url>
 (define-public ggml
   (package
     (name "ggml")
@@ -30,10 +33,12 @@
               (method git-fetch)
               (uri (git-reference
                     (url "https://github.com/ggerganov/ggml")
-                    (commit "master")))
+                    ;; TODO: Pin to specific commit for reproducibility
+                    (commit "b2730")))  ; Placeholder commit
               (file-name (git-file-name name version))
               (sha256
                (base32
+                ;; TODO: Calculate actual hash using: guix download <url>
                 "0000000000000000000000000000000000000000000000000000"))))
     (build-system gnu-build-system)
     (arguments
