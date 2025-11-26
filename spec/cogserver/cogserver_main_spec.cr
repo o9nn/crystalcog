@@ -13,6 +13,7 @@ describe "CogServer Main" do
     end
 
     it "creates server instance" do
+      server = CogServer::Server.new("localhost", 17001, 18080)
       server = CogServer::Server.new
       server.should be_a(CogServer::Server)
     end
@@ -32,6 +33,10 @@ describe "CogServer Main" do
     end
   end
 
+  describe "main entry point" do
+    it "has main function" do
+      # The main function should be callable
+      CogServer.responds_to?(:main).should be_true
   describe "system integration" do
     it "integrates with AtomSpace" do
       CogUtil.initialize
