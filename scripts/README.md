@@ -116,6 +116,26 @@ Legacy build script for the monorepo structure (primarily C++ components).
 ### `demo-monorepo.sh` - Monorepo Demo Script  
 Interactive demo script for the monorepo build system.
 
+## Validation Scripts
+
+### `validation/` Directory
+Contains validation and integration test scripts:
+
+- **`test_cogserver_integration.sh`** - CogServer Network API integration tests
+- **`validate_integration_test.sh`** - Meta-validation for integration test script
+- **`test_integration.sh`** - General Crystal implementation integration tests
+- **`validate-guix-packages.sh`** - Guix package validation
+- **`validate-setup-production.sh`** - Production setup validation
+
+See [validation/README.md](validation/README.md) for detailed documentation.
+
+**Key Features:**
+- ✅ Comprehensive CogServer API testing (HTTP, WebSocket, Telnet)
+- ✅ Meta-validation ensuring test quality
+- ✅ Dependency compatibility checking
+- ✅ Graceful error handling with fallbacks
+- ✅ CI/CD pipeline compatibility
+
 ## Production Scripts
 
 ### `production/` Directory
