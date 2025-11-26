@@ -20,6 +20,7 @@
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix git-download)
+  #:use-module (guix utils)
   #:use-module (guix build-system crystal)
   #:use-module (guix build-system cmake)
   #:use-module ((guix licenses) #:prefix license:)
