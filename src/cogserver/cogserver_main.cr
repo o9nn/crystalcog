@@ -86,7 +86,9 @@ module CogServer
   end
 end
 
-# Run if this file is executed directly
-if PROGRAM_NAME == __FILE__
+# Run if this file is the main program
+# Note: When built as an executable, PROGRAM_NAME will be the binary path,
+# not the source file path, so we need to check differently
+unless PROGRAM_NAME.includes?("crystal-run")
   CogServer.main
 end
