@@ -129,9 +129,19 @@ crystalcog
 cogutil_lib
 opencog_lib
 atomspace_lib
+cogutil_bin
+opencog_bin
+atomspace_bin
+pattern_matching
+pattern_mining
+nlp
+cogserver
+distributed_network_demo
+cogshell
 bin/
 *.o
 *.a
+test
 
 # Production environment and deployment files
 .env.production
