@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2024 CrystalCog Contributors
+;;; Copyright © 2024 OpenCog Community
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -23,7 +23,6 @@
   #:use-module (guix git)
   #:use-module (guix utils)
   #:use-module (guix build-system crystal)
-  #:use-module (guix build-system cmake)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (gnu packages)
   #:use-module (gnu packages databases)
@@ -31,8 +30,7 @@
   #:use-module (gnu packages guile)
   #:use-module (gnu packages maths)
   #:use-module (gnu packages boost)
-  #:use-module (gnu packages pkg-config)
-  #:use-module (gnu packages cmake))
+  #:use-module (gnu packages pkg-config))
 
 ;; Shared source definition for all CrystalCog packages
 (define crystalcog-source
@@ -126,7 +124,7 @@ complete reimplementation of the OpenCog framework in Crystal.")
            (lambda _
              (invoke "crystal" "build" "src/pln/pln.cr"))))))
     (inputs
-     (list atomspace cogutil guile-3.0))
+     (list atomspace cogutil))
     (synopsis "Probabilistic Logic Networks for CrystalCog")
     (description
      "PLN (Probabilistic Logic Networks) is an uncertain inference system for
