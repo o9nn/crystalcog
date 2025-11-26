@@ -77,8 +77,8 @@ TEMP_OUTPUT=$(mktemp)
 TEMP_ERRORS=$(mktemp)
 trap 'rm -f "$TEMP_OUTPUT" "$TEMP_ERRORS"' EXIT
 
-# Capture combined output for validation (stdout and stderr together is intentional
-# as we want to verify the complete output including any warnings or messages)
+# Capture combined output for validation (stdout and stderr together is intentional,
+# as we want to verify the complete output including any warnings or messages).
 if ./scripts/demo_profiling_tools.sh > "$TEMP_OUTPUT" 2>&1; then
     print_success "demo_profiling_tools.sh executed successfully"
     
@@ -105,14 +105,24 @@ echo "💎 Validating Crystal syntax..."
 if command -v crystal &> /dev/null; then
     print_success "Crystal is installed: $(crystal version | head -n1)"
     
-    # Check syntax of key files
-    for file in src/cogutil/performance_profiler.cr src/cogutil/profiling_cli.cr; do
+    # Define indentation for error messages
+    ERROR_INDENT="    "
+    
+    # Check syntax of key profiling files
+    # Note: We validate the core profiling files that are most likely to be modified
+    SYNTAX_CHECK_FILES=(
+        "src/cogutil/performance_profiler.cr"
+        "src/cogutil/profiling_cli.cr"
+        "src/cogutil/optimization_engine.cr"
+    )
+    
+    for file in "${SYNTAX_CHECK_FILES[@]}"; do
         if crystal build --no-codegen "$file" 2>"$TEMP_ERRORS"; then
             print_success "$file has valid Crystal syntax"
         else
             if [ -s "$TEMP_ERRORS" ]; then
                 print_warning "$file may have syntax issues:"
-                sed 's/^/    /' < "$TEMP_ERRORS" | head -5
+                sed "s/^/$ERROR_INDENT/" < "$TEMP_ERRORS" | head -5
             else
                 print_warning "$file may have syntax issues (detailed check needs dependencies)"
             fi
