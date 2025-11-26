@@ -1,0 +1,16 @@
+#!/bin/bash
+# Wrapper script for the CrystalCog performance profiler
+# This script runs the Crystal profiler CLI tool
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROFILER_CR="$SCRIPT_DIR/profiler.cr"
+
+# Check if Crystal is installed
+if ! command -v crystal &> /dev/null; then
+    echo "Error: Crystal is not installed. Please install Crystal first."
+    echo "Run: ./scripts/install-crystal.sh"
+    exit 1
+fi
+
+# Run the profiler with all provided arguments
+crystal run "$PROFILER_CR" -- "$@"
