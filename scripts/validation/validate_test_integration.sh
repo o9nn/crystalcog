@@ -173,6 +173,8 @@ done
 
 if [ $MISSING_TEST_REFS -eq 0 ]; then
     validate_check 0 "All expected test file references present"
+else
+    validate_check 1 "$MISSING_TEST_REFS test file references missing"
 fi
 
 # Check for portable directory handling (should not use hardcoded paths)
@@ -265,19 +267,16 @@ else
     
     TEMP_OUTPUT=$(mktemp)
     
-    if bash "$SCRIPT_PATH" > "$TEMP_OUTPUT" 2>&1; then
-        EXIT_CODE=$?
-        
-        # Check for graceful skip message
-        if grep -q "Skipping integration tests" "$TEMP_OUTPUT" || [ $EXIT_CODE -eq 0 ]; then
-            validate_check 0 "Script gracefully handles missing Crystal"
-            print_info "Output preview:"
-            cat "$TEMP_OUTPUT" | sed 's/^/     │ /'
-        else
-            validate_check 1 "Script did not gracefully handle missing Crystal"
-        fi
+    bash "$SCRIPT_PATH" > "$TEMP_OUTPUT" 2>&1
+    EXIT_CODE=$?
+    
+    # Check for graceful skip message
+    if grep -q "Skipping integration tests" "$TEMP_OUTPUT" || [ $EXIT_CODE -eq 0 ]; then
+        validate_check 0 "Script gracefully handles missing Crystal"
+        print_info "Output preview:"
+        cat "$TEMP_OUTPUT" | sed 's/^/     │ /'
     else
-        validate_check 1 "Script failed when Crystal not available"
+        validate_check 1 "Script did not gracefully handle missing Crystal (exit code: $EXIT_CODE)"
     fi
     
     rm -f "$TEMP_OUTPUT"
@@ -355,7 +354,12 @@ echo "════════════════════════�
 echo ""
 
 TOTAL_CHECKS=$((VALIDATION_PASSED + VALIDATION_FAILED))
-PASS_RATE=$(awk "BEGIN {printf \"%.1f\", ($VALIDATION_PASSED / $TOTAL_CHECKS) * 100}")
+
+if [ $TOTAL_CHECKS -eq 0 ]; then
+    PASS_RATE="0.0"
+else
+    PASS_RATE=$(awk "BEGIN {printf \"%.1f\", ($VALIDATION_PASSED / $TOTAL_CHECKS) * 100}")
+fi
 
 echo "   Total Checks:    $TOTAL_CHECKS"
 echo "   ✅ Passed:       $VALIDATION_PASSED"
