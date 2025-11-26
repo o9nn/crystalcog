@@ -21,8 +21,10 @@
   #:use-module (gnu packages version-control))
 
 ;; Note: These package definitions are placeholders for CrystalCog
-;; Until Guix has native Crystal build system support, we define
-;; these as stubs to enable the manifest to load
+;; development environment setup. Until Guix has native Crystal build
+;; system support, we define these as stubs to enable the manifest to load.
+;; The SHA256 hashes are dummy values since builds are deleted in the
+;; arguments phase - these packages are not actually built by Guix.
 
 (define-public opencog
   (package
@@ -33,6 +35,7 @@
               (uri "https://github.com/cogpy/crystalcog/archive/refs/heads/main.tar.gz")
               (sha256
                (base32
+                ;; Dummy hash - package build phases are deleted
                 "0000000000000000000000000000000000000000000000000000"))))
     (build-system gnu-build-system)
     (arguments
@@ -44,7 +47,7 @@
          (delete 'install))))
     (synopsis "CrystalCog cognitive architecture")
     (description
-     "CrystalCog is a comprehensive rewrite of the OpenCog artificial 
+     "CrystalCog is a comprehensive rewrite of the OpenCog artificial
 intelligence framework in the Crystal programming language.  This package
 provides the core cognitive architecture with reasoning engines, AtomSpace
 hypergraph database, and AI subsystems.")
@@ -96,7 +99,7 @@ hypergraph database, and AI subsystems.")
     (native-inputs (list guile-3.0))
     (synopsis "Probabilistic Logic Networks for Guile")
     (description
-     "Guile bindings for CrystalCog's Probabilistic Logic Networks (PLN) 
+     "Guile bindings for CrystalCog's Probabilistic Logic Networks (PLN)
 reasoning engine.")
     (home-page "https://github.com/cogpy/crystalcog")
     (license license:agpl3+)))
@@ -122,7 +125,7 @@ reasoning engine.")
     (native-inputs (list guile-3.0))
     (synopsis "Economic Attention Networks for Guile")
     (description
-     "Guile bindings for CrystalCog's Economic Attention Network (ECAN) 
+     "Guile bindings for CrystalCog's Economic Attention Network (ECAN)
 attention allocation system.")
     (home-page "https://github.com/cogpy/crystalcog")
     (license license:agpl3+)))
@@ -148,7 +151,7 @@ attention allocation system.")
     (native-inputs (list guile-3.0))
     (synopsis "MOSES evolutionary learning for Guile")
     (description
-     "Guile bindings for CrystalCog's Meta-Optimizing Semantic Evolutionary 
+     "Guile bindings for CrystalCog's Meta-Optimizing Semantic Evolutionary
 Search (MOSES) system.")
     (home-page "https://github.com/cogpy/crystalcog")
     (license license:agpl3+)))
