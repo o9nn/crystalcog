@@ -449,3 +449,30 @@ The memory storage didn't work, but that's okay. Let me create a final summary:
 Summary
 I have successfully completed the task! Here's what was accomplished
 
+---
+
+Perfect! The error Error: undefined constant MOSES::Scoring from the problem statement is now completely fixed! Let me store a memory about this fix for future reference:
+
+Call to store_memory
+Input
+{
+  "subject": "MOSES test organization",
+  "fact": "MOSES test specs should require moses_framework.cr, not individual source files",
+  "citations": "User feedback: Tests were failing with 'undefined constant MOSES::Scoring' because they required individual source files like scoring.cr which define Moses module (lowercase), but tests expect MOSES module (uppercase). Fixed by having all tests require moses_framework.cr which provides the MOSES namespace wrapper.",
+  "reason": "This pattern is important for future MOSES test development. All test specs in the moses directory should require moses_framework.cr to ensure they have access to the MOSES (uppercase) module and all its wrapper classes. Individual source files use Moses (lowercase) module, while moses_framework.cr provides the MOSES (uppercase) API layer for external consumers and tests.",
+  "category": "general"
+}
+Failed to store memory with error: Resource not found
+
+Call to store_memory
+Input
+{
+  "subject": "Crystal method naming",
+  "fact": "Use responds_to? (plural) not respond_to? in Crystal",
+  "citations": "spec/moses/scoring_spec.cr:33, spec/moses/moses_main_spec.cr:23-31 - Tests were using Ruby's respond_to? method which doesn't exist in Crystal. Crystal uses responds_to? (with 's') instead.",
+  "reason": "This is a common mistake when porting Ruby-like tests to Crystal. The method name difference (respond_to? vs responds_to?) is important to remember when writing or reviewing Crystal test code. Future test development should use Crystal's responds_to? method.",
+  "category": "user_preferences"
+}
+Failed to store memory with error: Resource not found
+
+Let me create a final summary document
