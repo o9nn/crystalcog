@@ -11,9 +11,9 @@ module CogUtil
       property heap_size : Int64         # GC heap size
       property heap_used : Int64         # GC heap used
       property total_allocations : Int64 # Total allocations
-      property free_count : Int64        # Total frees
+      property free_bytes : Int64        # Free bytes in heap
 
-      def initialize(@rss_kb, @vsize_kb, @heap_size, @heap_used, @total_allocations, @free_count)
+      def initialize(@rss_kb, @vsize_kb, @heap_size, @heap_used, @total_allocations, @free_bytes)
       end
 
       def memory_efficiency
@@ -88,12 +88,12 @@ module CogUtil
       end
 
       SystemMemoryInfo.new(
-        rss_kb: rss_kb,
-        vsize_kb: vsize_kb,
-        heap_size: gc_stats.heap_size,
-        heap_used: gc_stats.total_bytes,
-        total_allocations: gc_stats.total_bytes, # Approximation
-        free_count: gc_stats.free_count
+        rss_kb: rss_kb.to_i64,
+        vsize_kb: vsize_kb.to_i64,
+        heap_size: gc_stats.heap_size.to_i64,
+        heap_used: gc_stats.total_bytes.to_i64,
+        total_allocations: gc_stats.total_bytes.to_i64, # Approximation
+        free_bytes: gc_stats.free_bytes.to_i64
       )
     end
 
@@ -174,36 +174,35 @@ module CogUtil
 
     # Generate memory comparison report
     def self.generate_memory_report(results : Array(MemoryBenchmarkResult)) : String
-      report = StringBuilder.new
-      report << "Crystal CogUtil Memory Performance Report\n"
-      report << "========================================\n\n"
+      String.build do |report|
+        report << "Crystal CogUtil Memory Performance Report\n"
+        report << "========================================\n\n"
 
-      results.each do |result|
-        evaluation = evaluate_memory_efficiency(result)
+        results.each do |result|
+          evaluation = evaluate_memory_efficiency(result)
 
-        report << "Operation: #{result.operation}\n"
-        report << "  Duration: #{result.duration_ms.round(2)} ms\n"
-        report << "  Atoms processed: #{result.atom_count}\n"
-        report << "  Memory increase: #{result.memory_increase_kb} KB\n"
-        report << "  Memory per atom: #{result.memory_per_atom.round(2)} bytes\n"
-        report << "  Memory efficiency: #{result.memory_efficiency.round(1)}%\n"
-        report << "  Meets C++ target: #{evaluation["meets_cpp_target"]}\n"
-        report << "  Performance rating: #{evaluation["is_efficient"] ? "GOOD" : "NEEDS_IMPROVEMENT"}\n"
-        report << "\n"
+          report << "Operation: #{result.operation}\n"
+          report << "  Duration: #{result.duration_ms.round(2)} ms\n"
+          report << "  Atoms processed: #{result.atom_count}\n"
+          report << "  Memory increase: #{result.memory_increase_kb} KB\n"
+          report << "  Memory per atom: #{result.memory_per_atom.round(2)} bytes\n"
+          report << "  Memory efficiency: #{result.memory_efficiency.round(1)}%\n"
+          report << "  Meets C++ target: #{evaluation["meets_cpp_target"]}\n"
+          report << "  Performance rating: #{evaluation["is_efficient"] ? "GOOD" : "NEEDS_IMPROVEMENT"}\n"
+          report << "\n"
+        end
+
+        # Overall summary
+        total_atoms = results.sum(&.atom_count)
+        avg_memory_per_atom = results.map(&.memory_per_atom).sum / results.size
+        cpp_compatible = results.all? { |r| evaluate_memory_efficiency(r)["meets_cpp_target"].as(Bool) }
+
+        report << "Overall Summary:\n"
+        report << "  Total atoms processed: #{total_atoms}\n"
+        report << "  Average memory per atom: #{avg_memory_per_atom.round(2)} bytes\n"
+        report << "  C++ compatibility: #{cpp_compatible ? "PASS" : "FAIL"}\n"
+        report << "  Recommendation: #{cpp_compatible ? "Memory usage is comparable to C++" : "Memory optimization needed"}\n"
       end
-
-      # Overall summary
-      total_atoms = results.sum(&.atom_count)
-      avg_memory_per_atom = results.map(&.memory_per_atom).sum / results.size
-      cpp_compatible = results.all? { |r| evaluate_memory_efficiency(r)["meets_cpp_target"].as(Bool) }
-
-      report << "Overall Summary:\n"
-      report << "  Total atoms processed: #{total_atoms}\n"
-      report << "  Average memory per atom: #{avg_memory_per_atom.round(2)} bytes\n"
-      report << "  C++ compatibility: #{cpp_compatible ? "PASS" : "FAIL"}\n"
-      report << "  Recommendation: #{cpp_compatible ? "Memory usage is comparable to C++" : "Memory optimization needed"}\n"
-
-      report.to_s
     end
 
     # Benchmark AtomSpace memory scaling
