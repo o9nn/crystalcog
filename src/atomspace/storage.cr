@@ -14,6 +14,65 @@ require "json"
 require "http/client"
 
 module AtomSpace
+  # Database connection pool for improved concurrency and throughput
+  class ConnectionPool
+    @pool : Array(DB::Database)
+    @available : Channel(DB::Database)
+    @size : Int32
+    @connection_string : String
+    @mutex : Mutex
+    
+    def initialize(@connection_string : String, @size : Int32 = 10)
+      @pool = Array(DB::Database).new
+      @available = Channel(DB::Database).new(@size)
+      @mutex = Mutex.new
+      
+      # Initialize pool with connections
+      @size.times do
+        conn = DB.open(@connection_string)
+        @pool << conn
+        @available.send(conn)
+      end
+    end
+    
+    # Acquire a connection from the pool (blocks if none available)
+    def acquire : DB::Database
+      @available.receive
+    end
+    
+    # Release a connection back to the pool
+    def release(conn : DB::Database)
+      @available.send(conn)
+    end
+    
+    # Execute a block with a connection from the pool
+    def with_connection(&block : DB::Database -> T) : T forall T
+      conn = acquire
+      begin
+        yield conn
+      ensure
+        release(conn)
+      end
+    end
+    
+    # Close all connections in the pool
+    def close
+      @mutex.synchronize do
+        @pool.each(&.close)
+        @pool.clear
+      end
+    end
+    
+    # Get pool statistics
+    def stats : Hash(String, Int32)
+      {
+        "size" => @size,
+        "available" => @available.size,
+        "in_use" => @size - @available.size
+      }
+    end
+  end
+
   # Base interface for persistent storage
   abstract class StorageNode < Node
     def initialize(name : String)
@@ -54,6 +113,17 @@ module AtomSpace
         success = false unless store_atom(atom)
       end
       success
+    end
+
+    # Batch operations with transaction support (default implementation)
+    # Subclasses should override with proper transaction handling
+    def store_atoms_batch(atoms : Array(Atom)) : Bool
+      store_atoms(atoms)
+    end
+
+    # Fetch multiple atoms by handles
+    def fetch_atoms_batch(handles : Array(Handle)) : Array(Atom)
+      handles.compact_map { |h| fetch_atom(h) }
     end
 
     def fetch_atoms_by_type(type : AtomType) : Array(Atom)
@@ -328,15 +398,18 @@ module AtomSpace
     end
   end
 
-  # SQLite-based storage implementation
+  # SQLite-based storage implementation with connection pooling
   class SQLiteStorageNode < StorageNode
     @db_path : String
     @db : DB::Database?
+    @pool : ConnectionPool?
     @connected : Bool = false
+    @use_pool : Bool
+    @pool_size : Int32
 
-    def initialize(name : String, @db_path : String)
+    def initialize(name : String, @db_path : String, @use_pool : Bool = true, @pool_size : Int32 = 10)
       super(name)
-      log_info("SQLiteStorageNode created for: #{@db_path}")
+      log_info("SQLiteStorageNode created for: #{@db_path} (pool: #{@use_pool})")
     end
 
     def open : Bool
@@ -347,7 +420,16 @@ module AtomSpace
         dir = File.dirname(@db_path)
         Dir.mkdir_p(dir) unless Dir.exists?(dir)
 
-        @db = DB.open("sqlite3:#{@db_path}")
+        if @use_pool
+          # Use connection pool for better concurrency
+          @pool = ConnectionPool.new("sqlite3:#{@db_path}", @pool_size)
+          # Keep one connection for compatibility
+          @db = DB.open("sqlite3:#{@db_path}")
+        else
+          # Single connection mode
+          @db = DB.open("sqlite3:#{@db_path}")
+        end
+        
         create_tables
 
         @connected = true
@@ -360,6 +442,10 @@ module AtomSpace
     end
 
     def close : Bool
+      if @pool
+        @pool.try(&.close)
+        @pool = nil
+      end
       if @db
         @db.try(&.close)
         @db = nil
@@ -492,6 +578,72 @@ module AtomSpace
         log_error("Failed to store AtomSpace to SQLite: #{ex.message}")
         false
       end
+    end
+
+    # Batch store with transaction support for better performance
+    def store_atoms_batch(atoms : Array(Atom)) : Bool
+      return false unless @connected
+
+      begin
+        if @use_pool && @pool
+          # Use connection from pool
+          @pool.not_nil!.with_connection do |db|
+            db.transaction do |tx|
+              conn = tx.connection
+              atoms.each do |atom|
+                store_atom_in_connection(atom, conn)
+              end
+            end
+          end
+        else
+          # Use single connection with transaction
+          db = @db.not_nil!
+          db.transaction do |tx|
+            conn = tx.connection
+            atoms.each do |atom|
+              store_atom_in_connection(atom, conn)
+            end
+          end
+        end
+
+        log_info("Batch stored #{atoms.size} atoms to SQLite: #{@db_path}")
+        true
+      rescue ex
+        log_error("Failed to batch store atoms to SQLite: #{ex.message}")
+        false
+      end
+    end
+
+    # Helper method to store atom using a specific connection
+    private def store_atom_in_connection(atom : Atom, conn : DB::Connection) : Bool
+      case atom
+      when Node
+        conn.exec(
+          "INSERT OR REPLACE INTO atoms (handle, type, name, truth_strength, truth_confidence) VALUES (?, ?, ?, ?, ?)",
+          atom.handle.to_s, atom.type.to_s, atom.name,
+          atom.truth_value.strength, atom.truth_value.confidence
+        )
+      when Link
+        # Store the link
+        conn.exec(
+          "INSERT OR REPLACE INTO atoms (handle, type, name, truth_strength, truth_confidence) VALUES (?, ?, ?, ?, ?)",
+          atom.handle.to_s, atom.type.to_s, "",
+          atom.truth_value.strength, atom.truth_value.confidence
+        )
+
+        # Store outgoing relationships
+        conn.exec("DELETE FROM outgoing WHERE link_handle = ?", atom.handle.to_s)
+        atom.outgoing.each_with_index do |target, position|
+          conn.exec(
+            "INSERT INTO outgoing (link_handle, target_handle, position) VALUES (?, ?, ?)",
+            atom.handle.to_s, target.handle.to_s, position
+          )
+        end
+      end
+      true
+    rescue ex
+      log_error("Failed to store atom in connection: #{ex.message}")
+      false
     end
 
     def load_atomspace(atomspace : AtomSpace) : Bool
@@ -744,22 +896,34 @@ module AtomSpace
     end
   end
 
-  # PostgreSQL-based storage implementation
+  # PostgreSQL-based storage implementation with connection pooling
   class PostgresStorageNode < StorageNode
     @connection_string : String
     @db : DB::Database?
+    @pool : ConnectionPool?
     @connected : Bool = false
+    @use_pool : Bool
+    @pool_size : Int32
 
-    def initialize(name : String, @connection_string : String)
+    def initialize(name : String, @connection_string : String, @use_pool : Bool = true, @pool_size : Int32 = 10)
       super(name)
-      log_info("PostgresStorageNode created for: #{@connection_string}")
+      log_info("PostgresStorageNode created for: #{@connection_string} (pool: #{@use_pool})")
     end
 
     def open : Bool
       return true if @connected
 
       begin
-        @db = DB.open("postgres://#{@connection_string}")
+        if @use_pool
+          # Use connection pool for better concurrency
+          @pool = ConnectionPool.new("postgres://#{@connection_string}", @pool_size)
+          # Keep one connection for compatibility
+          @db = DB.open("postgres://#{@connection_string}")
+        else
+          # Single connection mode
+          @db = DB.open("postgres://#{@connection_string}")
+        end
+        
         create_tables
         @connected = true
         log_info("Opened PostgreSQL storage: #{@connection_string}")
@@ -774,6 +938,10 @@ module AtomSpace
       return true unless @connected
 
       begin
+        if @pool
+          @pool.try(&.close)
+          @pool = nil
+        end
         @db.try(&.close)
         @db = nil
         @connected = false
@@ -917,6 +1085,74 @@ module AtomSpace
         log_error("Failed to store AtomSpace to PostgreSQL: #{ex.message}")
         false
       end
+    end
+
+    # Batch store with transaction support for better performance
+    def store_atoms_batch(atoms : Array(Atom)) : Bool
+      return false unless @connected
+
+      begin
+        if @use_pool && @pool
+          # Use connection from pool
+          @pool.not_nil!.with_connection do |db|
+            db.transaction do |tx|
+              conn = tx.connection
+              atoms.each do |atom|
+                store_atom_in_connection(atom, conn)
+              end
+            end
+          end
+        else
+          # Use single connection with transaction
+          db = @db.not_nil!
+          db.transaction do |tx|
+            conn = tx.connection
+            atoms.each do |atom|
+              store_atom_in_connection(atom, conn)
+            end
+          end
+        end
+
+        log_info("Batch stored #{atoms.size} atoms to PostgreSQL: #{@connection_string}")
+        true
+      rescue ex
+        log_error("Failed to batch store atoms to PostgreSQL: #{ex.message}")
+        false
+      end
+    end
+
+    # Helper method to store atom using a specific connection
+    private def store_atom_in_connection(atom : Atom, conn : DB::Connection) : Bool
+      tv = atom.truth_value
+      conn.exec(
+        "INSERT INTO atoms (handle, type, name, truth_strength, truth_confidence) 
+         VALUES ($1, $2, $3, $4, $5) 
+         ON CONFLICT (handle) DO UPDATE SET 
+         type = EXCLUDED.type, name = EXCLUDED.name, 
+         truth_strength = EXCLUDED.truth_strength, 
+         truth_confidence = EXCLUDED.truth_confidence",
+        atom.handle.to_s, atom.type.to_s, 
+        atom.is_a?(Node) ? atom.name : "",
+        tv.strength, tv.confidence
+      )
+
+      # Store outgoing relationships for links
+      if atom.is_a?(Link)
+        # Remove existing outgoing relationships
+        conn.exec("DELETE FROM outgoing WHERE link_handle = $1", atom.handle.to_s)
+        
+        # Add new outgoing relationships
+        atom.outgoing.each_with_index do |target, index|
+          conn.exec(
+            "INSERT INTO outgoing (link_handle, target_handle, position) VALUES ($1, $2, $3)",
+            atom.handle.to_s, target.handle.to_s, index
+          )
+        end
+      end
+      true
+    rescue ex
+      log_error("Failed to store atom in connection: #{ex.message}")
+      false
     end
 
     def load_atomspace(atomspace : AtomSpace) : Bool
