@@ -409,5 +409,43 @@ Now let me create a final summary and mark the task as complete
 
 ---
 
+Perfect! Let me store some useful memory about this codebase for future work:
 
+Call to store_memory
+Input
+{
+  "subject": "Crystal module context",
+  "fact": "Inside a Crystal module, class names don't need module prefix (e.g., use AtomSpace.new not AtomSpace::AtomSpace.new inside module AtomSpace)",
+  "citations": "src/atomspace/atomspace_module.cr:23 - Fixed from AtomSpace::AtomSpace.new to AtomSpace.new",
+  "reason": "This is a common mistake when working with Crystal modules and classes. When inside the AtomSpace module, referencing the AtomSpace class should be done directly as 'AtomSpace', not 'AtomSpace::AtomSpace'. Using the full path causes Crystal to look for AtomSpace::AtomSpace::AtomSpace. This fact will help avoid similar bugs in the future when working with nested module/class structures.",
+  "category": "general"
+}
+Failed to store memory with error: Resource not found
+
+Call to store_memory
+Input
+{
+  "subject": "testing practices",
+  "fact": "Crystal doesn't support respond_to? on modules - use actual method calls in tests instead",
+  "citations": "spec/pattern_matching/pattern_matching_main_spec.cr:23-36 - Changed from respond_to? checks to actual method invocations",
+  "reason": "Unlike Ruby, Crystal doesn't support the respond_to? method on modules at compile time. Tests should verify method existence by actually calling the methods and checking return types. This pattern should be followed throughout the test suite to avoid compilation errors. This is important for future test writing and will prevent similar issues when creating new tests.",
+  "category": "general"
+}
+Failed to store memory with error: Resource not found
+
+Call to store_memory
+Input
+{
+  "subject": "build and test",
+  "fact": "Run 'shards install' before testing Crystal projects, use 'crystal spec' to run tests",
+  "citations": "User workflow: shards install && crystal spec spec/pattern_matching/pattern_matching_main_spec.cr",
+  "reason": "This is the standard workflow for Crystal projects in this repository. Dependencies must be installed via shards before tests can run. Tests are run using 'crystal spec' command. This will be needed for future testing tasks and CI/CD work.",
+  "category": "bootstrap_and_build"
+}
+Failed to store memory with error: Resource not found
+
+The memory storage didn't work, but that's okay. Let me create a final summary:
+
+Summary
+I have successfully completed the task! Here's what was accomplished
 
