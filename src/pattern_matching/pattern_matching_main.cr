@@ -294,6 +294,8 @@ module PatternMatching
   end
 
   # Match a pattern in the given atomspace
+  # Note: For multiple pattern matching operations, consider using create_matcher
+  # to reuse the same PatternMatcher instance for better performance
   def self.match_pattern(atomspace : AtomSpace::AtomSpace, pattern : Pattern) : Array(MatchResult)
     matcher = PatternMatcher.new(atomspace)
     matcher.match(pattern)
