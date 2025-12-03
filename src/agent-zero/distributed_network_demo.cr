@@ -58,7 +58,7 @@ module AgentZero
 
       # Allow agents to discover and connect to each other
       puts "\n3. Agent Discovery and Network Formation..."
-      sleep 2
+      sleep 2.seconds
 
       # Check network status
       status = network.network_status

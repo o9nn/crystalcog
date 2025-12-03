@@ -237,7 +237,7 @@ module AgentZero
       start_time = Time.monotonic
       while received_results.size < expected_responses.size &&
             (Time.monotonic - start_time).total_seconds < timeout_seconds
-        sleep 0.1
+        sleep 0.1.seconds
       end
 
       # Restore original handler
@@ -469,7 +469,7 @@ module AgentZero
           end
         end
 
-        sleep 30 # Send heartbeat every 30 seconds
+        sleep 30.seconds # Send heartbeat every 30 seconds
       end
     end
 

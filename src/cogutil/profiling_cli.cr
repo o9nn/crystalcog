@@ -202,7 +202,7 @@ module CogUtil
           large_array.sum
         end
         
-        sleep 0.1
+        sleep 0.1.seconds
       end
       
       session = PerformanceProfiler.end_session
@@ -511,7 +511,7 @@ module CogUtil
       
       # Add some mock profiling data
       session.start_profile("example_function")
-      sleep 0.01
+      sleep 0.01.seconds
       session.end_profile("example_function")
       
       session
@@ -531,7 +531,7 @@ module CogUtil
       iterations.times do |i|
         start = Time.monotonic
         # Simulate AtomSpace operations
-        sleep 0.001
+        sleep 0.001.seconds
         total_time += (Time.monotonic - start).total_seconds
         
         if @verbose && (i + 1) % (iterations // 10) == 0

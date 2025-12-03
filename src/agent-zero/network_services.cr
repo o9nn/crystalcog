@@ -281,7 +281,7 @@ module AgentZero
           end
         end
 
-        sleep 60 # Cleanup every minute
+        sleep 60.seconds # Cleanup every minute
       end
     end
 
@@ -441,7 +441,7 @@ module AgentZero
           end
         end
 
-        sleep 1
+        sleep 1.second
       end
     end
 

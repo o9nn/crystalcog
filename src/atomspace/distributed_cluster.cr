@@ -173,7 +173,7 @@ module AtomSpace
       
       # Fibers will exit naturally when @running becomes false
       # Give them time to complete their current iteration
-      sleep 0.1
+      sleep 0.1.seconds
       
       emit_event(ClusterEvent::NODE_LEFT, @node_id)
       CogUtil::Logger.info("Cluster node #{@node_id} stopped")
@@ -523,14 +523,14 @@ module AtomSpace
           end
         end
 
-        sleep 30 # Heartbeat every 30 seconds
+        sleep 30.seconds # Heartbeat every 30 seconds
       end
     end
 
     private def sync_loop
       while @running
         process_pending_sync_operations
-        sleep 5 # Process sync operations every 5 seconds
+        sleep 5.seconds # Process sync operations every 5 seconds
       end
     end
 

@@ -64,7 +64,7 @@ module CogServer
 
     # Keep the main thread alive
     while server.running?
-      sleep 1
+      sleep 1.second
     end
   end
 
