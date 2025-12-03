@@ -21,15 +21,25 @@ describe "Attention Main" do
 
   describe "attention functionality" do
     it "provides attention allocation" do
-      Attention.respond_to?(:allocate_attention).should be_true
+      atomspace = AtomSpace::AtomSpace.new
+      engine = Attention.create_engine(atomspace)
+      # Should be able to allocate attention
+      engine.allocate_attention(1)
+      engine.should_not be_nil
     end
 
     it "provides rent collection" do
-      Attention.respond_to?(:collect_rent).should be_true
+      atomspace = AtomSpace::AtomSpace.new
+      engine = Attention.create_engine(atomspace)
+      # Should have rent collector
+      engine.rent_collector.should_not be_nil
     end
 
     it "provides diffusion" do
-      Attention.respond_to?(:diffuse_attention).should be_true
+      atomspace = AtomSpace::AtomSpace.new
+      engine = Attention.create_engine(atomspace)
+      # Should have diffusion
+      engine.diffusion.should_not be_nil
     end
   end
 

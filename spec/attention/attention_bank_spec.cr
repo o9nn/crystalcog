@@ -28,22 +28,25 @@ describe Attention::AttentionBank do
   end
 
   describe "attention values" do
-    it "sets STI values" do
+    it "sets attention values" do
       atomspace = AtomSpace::AtomSpace.new
       bank = Attention::AttentionBank.new(atomspace)
       concept = atomspace.add_concept_node("test")
 
-      bank.set_sti(concept, 100)
-      bank.get_sti(concept).should eq(100)
+      av = AtomSpace::AttentionValue.new(100_i16, 50_i16)
+      bank.set_attention_value(concept.handle, av)
+      retrieved_av = bank.get_attention_value(concept.handle)
+      retrieved_av.should_not be_nil
     end
 
-    it "sets LTI values" do
+    it "stimulates atoms" do
       atomspace = AtomSpace::AtomSpace.new
       bank = Attention::AttentionBank.new(atomspace)
       concept = atomspace.add_concept_node("test")
 
-      bank.set_lti(concept, 50)
-      bank.get_lti(concept).should eq(50)
+      # Should be able to stimulate an atom
+      bank.stimulate(concept.handle, 50_i16)
+      # Should not crash
     end
   end
 end

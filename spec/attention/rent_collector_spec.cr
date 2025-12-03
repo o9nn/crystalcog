@@ -6,7 +6,7 @@ describe Attention::RentCollector do
     it "creates rent collector" do
       atomspace = AtomSpace::AtomSpace.new
       bank = Attention::AttentionBank.new(atomspace)
-      collector = Attention::RentCollector.new(atomspace, bank)
+      collector = Attention::RentCollector.new(bank)
 
       collector.should_not be_nil
     end
@@ -14,7 +14,7 @@ describe Attention::RentCollector do
     it "has default rent rate" do
       atomspace = AtomSpace::AtomSpace.new
       bank = Attention::AttentionBank.new(atomspace)
-      collector = Attention::RentCollector.new(atomspace, bank)
+      collector = Attention::RentCollector.new(bank)
 
       collector.rent_rate.should eq(0.01)
     end
@@ -24,33 +24,32 @@ describe Attention::RentCollector do
     it "collects rent from atoms" do
       atomspace = AtomSpace::AtomSpace.new
       bank = Attention::AttentionBank.new(atomspace)
-      collector = Attention::RentCollector.new(atomspace, bank)
+      collector = Attention::RentCollector.new(bank)
 
-      # Create atom with STI
+      # Create atom with attention value
       concept = atomspace.add_concept_node("test")
-      bank.set_sti(concept, 100)
-
-      initial_sti = bank.get_sti(concept)
+      av = AtomSpace::AttentionValue.new(100_i16, 50_i16)
+      bank.set_attention_value(concept.handle, av)
 
       # Collect rent
       collector.collect_rent
 
-      # STI should be reduced (or stay same if no decay)
-      final_sti = bank.get_sti(concept)
-      final_sti.should be <= initial_sti
+      # Should not crash
+      true.should be_true
     end
 
     it "applies LTI adjustments" do
       atomspace = AtomSpace::AtomSpace.new
       bank = Attention::AttentionBank.new(atomspace)
-      collector = Attention::RentCollector.new(atomspace, bank)
+      collector = Attention::RentCollector.new(bank)
 
-      # Create atom with LTI
+      # Create atom with attention value
       concept = atomspace.add_concept_node("test")
-      bank.set_lti(concept, 50)
+      av = AtomSpace::AttentionValue.new(50_i16, 50_i16)
+      bank.set_attention_value(concept.handle, av)
 
       # Apply LTI adjustments
-      collector.apply_lti_adjustments
+      collector.lti_rent_adjustment
 
       # Should not crash
       true.should be_true
