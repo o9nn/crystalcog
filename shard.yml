@@ -35,6 +35,29 @@ targets:
     
   opencog_bin:
     main: src/opencog/opencog.cr
+
+  # Reasoning engines
+  pln_bin:
+    main: src/pln/pln.cr
+
+  ure_bin:
+    main: src/ure/ure.cr
+
+  # Specialized components
+  moses_bin:
+    main: src/moses/moses.cr
+
+  attention_bin:
+    main: src/attention/attention.cr
+
+  learning_bin:
+    main: src/learning/learning_main.cr
+
+  ml_bin:
+    main: src/ml/ml_main.cr
+
+  ai_integration_bin:
+    main: src/ai_integration/ai_bridge.cr
   
   # Pattern processing components  
   pattern_matching:
