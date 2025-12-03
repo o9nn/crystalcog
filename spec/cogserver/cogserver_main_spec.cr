@@ -37,6 +37,9 @@ describe "CogServer Main" do
     it "has main function" do
       # The main function should be callable
       CogServer.responds_to?(:main).should be_true
+    end
+  end
+
   describe "system integration" do
     it "integrates with AtomSpace" do
       CogUtil.initialize
