@@ -386,6 +386,158 @@ module AtomSpace
     end
   end
 
+  # Atom resolver interface for lazy loading
+  # Implementations should provide a way to resolve handles to atoms
+  module AtomResolver
+    abstract def resolve_atom(handle : Handle) : Atom?
+  end
+
+  # Lazy Link class - defers loading of outgoing atoms until accessed
+  # This reduces memory footprint for large graphs by loading target atoms on-demand
+  class LazyLink < Atom
+    @outgoing_handles : Array(Handle)
+    @outgoing_cache : Array(Atom)?
+    @resolver : AtomResolver?
+    @loaded : Bool = false
+    @mutex : Mutex
+
+    def initialize(type : AtomType, @outgoing_handles : Array(Handle),
+                   truth_value : TruthValue = TruthValue::DEFAULT_TV,
+                   @resolver : AtomResolver? = nil)
+      unless type.link?
+        raise ArgumentError.new("Link type expected, got #{type}")
+      end
+      super(type, truth_value)
+      @mutex = Mutex.new
+    end
+
+    # Set the resolver after construction (e.g., when loading from storage)
+    def resolver=(resolver : AtomResolver)
+      @resolver = resolver
+    end
+
+    # Get handles without loading atoms (for serialization)
+    def outgoing_handles : Array(Handle)
+      @outgoing_handles
+    end
+
+    # Check if outgoing atoms have been loaded
+    def loaded? : Bool
+      @loaded
+    end
+
+    # Force loading of all outgoing atoms
+    def load! : Bool
+      return true if @loaded
+      @mutex.synchronize do
+        return true if @loaded
+        load_outgoing_atoms
+      end
+    end
+
+    # Get outgoing atoms, loading if necessary
+    def outgoing : Array(Atom)
+      unless @loaded
+        @mutex.synchronize do
+          load_outgoing_atoms unless @loaded
+        end
+      end
+      @outgoing_cache || [] of Atom
+    end
+
+    def name : String
+      ""
+    end
+
+    def arity : Int32
+      @outgoing_handles.size
+    end
+
+    def clone : Atom
+      # Clone as a regular link if loaded, otherwise as lazy link
+      if @loaded && @outgoing_cache
+        cloned_outgoing = @outgoing_cache.not_nil!.map(&.clone)
+        Link.new(type, cloned_outgoing, truth_value.clone)
+      else
+        LazyLink.new(type, @outgoing_handles.dup, truth_value.clone, @resolver)
+      end
+    end
+
+    def to_s(io : IO) : Nil
+      io << "(#{type}"
+      if @loaded && @outgoing_cache
+        @outgoing_cache.not_nil!.each do |atom|
+          io << " "
+          atom.to_s(io)
+        end
+      else
+        @outgoing_handles.each do |handle|
+          io << " Handle(#{handle})"
+        end
+      end
+      io << ")"
+    end
+
+    def content_equals?(other : Atom) : Bool
+      return false unless other.is_a?(LazyLink) || other.is_a?(Link)
+
+      if other.is_a?(LazyLink)
+        return @outgoing_handles == other.outgoing_handles unless @loaded || other.loaded?
+      end
+
+      return false unless arity == other.arity
+
+      outgoing.zip(other.outgoing) do |a, b|
+        return false unless a == b
+      end
+      true
+    end
+
+    # Get atom at specific position (may trigger load)
+    def [](index : Int32) : Atom
+      outgoing[index]
+    end
+
+    # Get first atom
+    def first : Atom
+      outgoing[0]
+    end
+
+    # Get last atom
+    def last : Atom
+      outgoing[-1]
+    end
+
+    # Convert to a regular (non-lazy) Link
+    def to_link : Link
+      Link.new(type, outgoing, truth_value)
+    end
+
+    private def load_outgoing_atoms : Bool
+      resolver = @resolver
+      unless resolver
+        CogUtil::Logger.warn("LazyLink: No resolver set, cannot load outgoing atoms")
+        @outgoing_cache = [] of Atom
+        @loaded = true
+        return false
+      end
+
+      atoms = [] of Atom
+      @outgoing_handles.each do |handle|
+        atom = resolver.resolve_atom(handle)
+        if atom
+          atoms << atom
+        else
+          CogUtil::Logger.warn("LazyLink: Failed to resolve handle #{handle}")
+        end
+      end
+
+      @outgoing_cache = atoms
+      @loaded = true
+      atoms.size == @outgoing_handles.size
+    end
+  end
+
   # Attention value for atoms (used by attention allocation system)
   class AttentionValue
     getter sti : Int16 # Short-term importance
