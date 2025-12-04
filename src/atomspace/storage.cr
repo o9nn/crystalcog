@@ -74,7 +74,10 @@ module AtomSpace
   end
 
   # Base interface for persistent storage
+  # Implements AtomResolver for lazy loading support
   abstract class StorageNode < Node
+    include AtomResolver
+
     def initialize(name : String)
       super(AtomType::STORAGE_NODE, name)
     end
@@ -106,6 +109,25 @@ module AtomSpace
     # Get storage statistics
     abstract def get_stats : Hash(String, String | Int32 | Int64)
 
+    # AtomResolver interface implementation - used by lazy loading
+    def resolve_atom(handle : Handle) : Atom?
+      fetch_atom(handle)
+    end
+
+    # Fetch a link with lazy loading (defers loading of outgoing atoms)
+    def fetch_link_lazy(handle : Handle) : LazyLink?
+      # Default implementation - subclasses can override for optimized loading
+      atom = fetch_atom(handle)
+      return nil unless atom
+      return nil unless atom.is_a?(Link)
+
+      # Convert regular link to lazy link
+      link = atom.as(Link)
+      outgoing_handles = link.outgoing.map(&.handle)
+      lazy_link = LazyLink.new(link.type, outgoing_handles, link.truth_value, self)
+      lazy_link
+    end
+
     # Bulk operations
     def store_atoms(atoms : Array(Atom)) : Bool
       success = true
@@ -124,6 +146,11 @@ module AtomSpace
     # Fetch multiple atoms by handles
     def fetch_atoms_batch(handles : Array(Handle)) : Array(Atom)
       handles.compact_map { |h| fetch_atom(h) }
+    end
+
+    # Fetch multiple links with lazy loading
+    def fetch_links_lazy_batch(handles : Array(Handle)) : Array(LazyLink)
+      handles.compact_map { |h| fetch_link_lazy(h) }
     end
 
     def fetch_atoms_by_type(type : AtomType) : Array(Atom)
