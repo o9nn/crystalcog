@@ -5,6 +5,7 @@
 # providing discovery, coordination, and collective intelligence capabilities.
 
 require "./distributed_agents"
+require "./network_services"
 require "json"
 require "../cogutil/cogutil"
 
@@ -213,9 +214,13 @@ module AgentZero
       avg_trust_level = @agents.values.map(&.trust_level).sum / @agents.size
       network_connectivity = @agents.size > 1 ? total_connections.to_f / (@agents.size * (@agents.size - 1)) : 0.0
 
+      # Count active agents (those that are active or busy)
+      active_count = @agents.values.count { |agent| agent.status == AgentNode::AgentStatus::Active || agent.status == AgentNode::AgentStatus::Busy }
+
       NetworkStatus.new(
         @name,
         @agents.size,
+        active_count,
         @running,
         network_connectivity,
         avg_trust_level,
@@ -419,6 +424,8 @@ module AgentZero
       Flood
       Selective
       Consensus
+      Gossip
+      Targeted
     end
   end
 
@@ -426,6 +433,7 @@ module AgentZero
   struct NetworkStatus
     property network_name : String
     property agent_count : Int32
+    property active_agents : Int32
     property running : Bool
     property connectivity : Float64
     property average_trust : Float64
@@ -433,7 +441,7 @@ module AgentZero
     property config : AgentNetwork::NetworkConfig
     property timestamp : Time
 
-    def initialize(@network_name : String, @agent_count : Int32, @running : Bool,
+    def initialize(@network_name : String, @agent_count : Int32, @active_agents : Int32, @running : Bool,
                    @connectivity : Float64, @average_trust : Float64,
                    @agents : Hash(String, Hash(String, JSON::Any)),
                    @config : AgentNetwork::NetworkConfig)
@@ -444,6 +452,7 @@ module AgentZero
       json.object do
         json.field "network_name", @network_name
         json.field "agent_count", @agent_count
+        json.field "active_agents", @active_agents
         json.field "running", @running
         json.field "connectivity", @connectivity
         json.field "average_trust", @average_trust

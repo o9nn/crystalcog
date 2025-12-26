@@ -36,7 +36,7 @@ describe "AgentZero E2E Tests" do
         # Test collaborative reasoning
         result = network.collaborative_reasoning(
           "What is distributed artificial intelligence?",
-          timeout: 5
+          timeout_seconds: 5
         )
         
         result.should_not be_nil
@@ -88,7 +88,7 @@ describe "AgentZero E2E Tests" do
         ]
         
         queries.each do |query|
-          result = network.collaborative_reasoning(query, timeout: 5)
+          result = network.collaborative_reasoning(query, timeout_seconds: 5)
           result.query.should eq(query)
           result.results.should be_a(Array(AgentZero::CollaborativeResult))
         end
@@ -198,7 +198,7 @@ describe "AgentZero E2E Tests" do
         sleep 0.1
         
         # Network should still function
-        result = network.collaborative_reasoning("Test query after failure", timeout: 3)
+        result = network.collaborative_reasoning("Test query after failure", timeout_seconds: 3)
         result.should_not be_nil
         
         # Verify network adapted
@@ -267,7 +267,7 @@ describe "AgentZero E2E Tests" do
       start_time = Time.monotonic
       
       10.times do |i|
-        network.collaborative_reasoning("Performance test query #{i}", timeout: 2)
+        network.collaborative_reasoning("Performance test query #{i}", timeout_seconds: 2)
       end
       
       elapsed = Time.monotonic - start_time

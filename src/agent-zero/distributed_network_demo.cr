@@ -13,7 +13,7 @@ module AgentZero
       puts "=" * 50
 
       # Initialize logging
-      CogUtil::Logger.level = CogUtil::LogLevel::INFO
+      CogUtil::Logger.set_level(CogUtil::LogLevel::INFO)
 
       demo = new
       demo.run_demo
