@@ -77,10 +77,20 @@ targets:
   distributed_network_demo:
     main: src/agent-zero/distributed_network_demo.cr
     
+  # Spatial and temporal reasoning (Phase 6-7)
+  spatial:
+    main: src/spatial/spatial.cr
+
+  temporal:
+    main: src/temporal/temporal.cr
+
+  behavior:
+    main: src/behavior/behavior.cr
+
   # Command line tools
   cogshell:
     main: src/tools/cogshell.cr
-    
+
   profiler:
     main: tools/profiler.cr
 
