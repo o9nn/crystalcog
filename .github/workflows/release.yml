@@ -11,6 +11,9 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: read
+
 env:
   CRYSTAL_VERSION: '1.14.0'
 
@@ -21,13 +24,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-24.04, macos-15-intel]
         include:
-          - os: ubuntu-latest
-            artifact_name: crystalcog-linux-x86_64
+          - os: ubuntu-24.04
+            artifact_name: crystalcog-main-linux-x86_64
             binary_path: crystalcog
-          - os: macos-latest
-            artifact_name: crystalcog-macos-x86_64
+          - os: macos-15-intel
+            artifact_name: crystalcog-main-macos-x86_64
             binary_path: crystalcog
     
     steps:
@@ -48,10 +51,12 @@ jobs:
     - name: Install system dependencies (macOS)
       if: runner.os == 'macOS'
       run: |
-        brew install sqlite3 rocksdb libevent openssl
+        brew install sqlite3 rocksdb libevent openssl@3
+        echo "LIBRARY_PATH=$(brew --prefix)/lib:${LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+        echo "PKG_CONFIG_PATH=$(brew --prefix openssl@3)/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
 
     - name: Install dependencies
-      run: shards install --production
+      run: shards install --frozen --production
 
     - name: Build release binary
       run: |
@@ -116,8 +121,8 @@ jobs:
         ## Installation
         
         Download the appropriate binary for your platform:
-        - **Linux**: `crystalcog-linux-x86_64.tar.gz`
-        - **macOS**: `crystalcog-macos-x86_64.tar.gz`
+        - **Linux**: `crystalcog-main-linux-x86_64.tar.gz`
+        - **macOS**: `crystalcog-main-macos-x86_64.tar.gz`
         
         Extract and run:
         ```bash
@@ -127,12 +132,12 @@ jobs:
         
         ## Changes
         
-        See the [commit history](https://github.com/cogpy/crystalcog/commits/main) for detailed changes.
+        See the [commit history](https://github.com/${{ github.repository }}/commits/main) for detailed changes.
         
         ## Documentation
         
-        - [README](https://github.com/cogpy/crystalcog/blob/main/README.md)
-        - [Examples](https://github.com/cogpy/crystalcog/tree/main/examples)
+        - [README](https://github.com/${{ github.repository }}/blob/main/README.md)
+        - [Examples](https://github.com/${{ github.repository }}/tree/main/examples)
         
         EOF
 
@@ -160,6 +165,29 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    - name: Download verified Linux release binary
+      uses: actions/download-artifact@v4
+      with:
+        name: crystalcog-main-linux-x86_64
+        path: cli-release/
+
+    - name: Create CLI runtime image definition
+      run: |
+        tar -xzf cli-release/crystalcog-main-linux-x86_64.tar.gz -C cli-release/
+        cat > Dockerfile.release-cli << 'EOF'
+        FROM ubuntu:24.04
+        RUN apt-get update && apt-get install -y --no-install-recommends \
+            ca-certificates libsqlite3-0 librocksdb8.9 libpq5 \
+            libevent-2.1-7t64 libevent-pthreads-2.1-7t64 libssl3t64 \
+            libgcc-s1 libstdc++6 libgmp10 libyaml-0-2 libpcre2-8-0 libgc1 \
+            && rm -rf /var/lib/apt/lists/* \
+            && useradd -m -u 10001 crystalcog
+        COPY cli-release/crystalcog /usr/local/bin/crystalcog
+        RUN chmod +x /usr/local/bin/crystalcog && crystalcog --version
+        USER crystalcog
+        ENTRYPOINT ["crystalcog"]
+        EOF
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
@@ -184,10 +212,11 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: .
+        file: Dockerfile.release-cli
         push: true
         tags: |
-          ghcr.io/${{ github.repository }}:${{ steps.get_version.outputs.version }}
-          ghcr.io/${{ github.repository }}:latest
+          ghcr.io/${{ github.repository }}/cli:${{ steps.get_version.outputs.version }}
+          ghcr.io/${{ github.repository }}/cli:latest
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
@@ -246,4 +275,4 @@ jobs:
         echo "## Release Links" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/${{ steps.get_version.outputs.version }})" >> $GITHUB_STEP_SUMMARY
-        echo "- [Docker Image](https://ghcr.io/${{ github.repository }}:${{ steps.get_version.outputs.version }})" >> $GITHUB_STEP_SUMMARY
+        echo "- [Docker Image](https://ghcr.io/${{ github.repository }}/cli:${{ steps.get_version.outputs.version }})" >> $GITHUB_STEP_SUMMARY
