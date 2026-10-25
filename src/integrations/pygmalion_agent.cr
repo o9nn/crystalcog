@@ -38,6 +38,15 @@ module PygmalionAgent
   # ==========================================================================
 
   # Comprehensive sampling parameters matching Aphrodite Engine
+  # Raised when the backend answers with a non-success HTTP status.
+  class BackendError < Exception
+    getter status_code : Int32
+
+    def initialize(operation : String, @status_code : Int32)
+      super("#{operation}: #{@status_code}")
+    end
+  end
+
   class SamplingConfig
     # Basic sampling
     property temperature : Float64
@@ -655,7 +664,7 @@ module PygmalionAgent
       func = json["function"]
       new(
         json["id"].as_s,
-        json["type"]?.try(&.as_s) || "function",
+        json["type"]?.try(&.as_s?) || "function",
         func["name"].as_s,
         func["arguments"].as_s
       )
@@ -1503,12 +1512,12 @@ module PygmalionAgent
 
     def self.from_json(body : String) : EmbeddingResponse
       json = JSON.parse(body)
-      response = new(model: json["model"]?.try(&.as_s) || "")
+      response = new(model: json["model"]?.try(&.as_s?) || "")
 
-      if data = json["data"]?
-        data.as_a.each do |item|
-          if emb = item["embedding"]?
-            response.embeddings << emb.as_a.map(&.as_f)
+      if data = json["data"]?.try(&.as_a?)
+        data.each do |item|
+          if emb = item["embedding"]?.try(&.as_a?)
+            response.embeddings << emb.map { |v| v.as_f? || v.as_i64.to_f }
           end
         end
       end
@@ -1562,8 +1571,8 @@ module PygmalionAgent
 
     def self.from_json(body : String) : TokenizeResponse
       json = JSON.parse(body)
-      tokens = json["tokens"]?.try(&.as_a.map(&.as_i)) || [] of Int32
-      count = json["count"]?.try(&.as_i) || tokens.size
+      tokens = json["tokens"]?.try(&.as_a?).try(&.map(&.as_i)) || [] of Int32
+      count = json["count"]?.try(&.as_i?) || tokens.size
       new(tokens, count)
     end
   end
@@ -1599,7 +1608,7 @@ module PygmalionAgent
 
     def self.from_json(body : String) : DetokenizeResponse
       json = JSON.parse(body)
-      new(json["text"]?.try(&.as_s) || "")
+      new(json["text"]?.try(&.as_s?) || "")
     end
   end
 
@@ -1618,9 +1627,9 @@ module PygmalionAgent
 
     def self.from_json(json : JSON::Any) : TokenUsage
       new(
-        json["prompt_tokens"]?.try(&.as_i) || 0,
-        json["completion_tokens"]?.try(&.as_i) || 0,
-        json["total_tokens"]?.try(&.as_i) || 0
+        json["prompt_tokens"]?.try(&.as_i?) || 0,
+        json["completion_tokens"]?.try(&.as_i?) || 0,
+        json["total_tokens"]?.try(&.as_i?) || 0
       )
     end
   end
@@ -1650,21 +1659,21 @@ module PygmalionAgent
 
       # Handle tool calls
       tool_calls : Array(ToolCall)? = nil
-      if tc_json = message_json["tool_calls"]?
-        tool_calls = tc_json.as_a.map { |tc| ToolCall.from_json(tc) }
+      if tc_json = message_json["tool_calls"]?.try(&.as_a?)
+        tool_calls = tc_json.map { |tc| ToolCall.from_json(tc) }
       end
 
       message = ChatMessage.new(
         message_json["role"].as_s,
-        message_json["content"]?.try(&.as_s) || "",
-        message_json["name"]?.try(&.as_s),
+        message_json["content"]?.try(&.as_s?) || "",
+        message_json["name"]?.try(&.as_s?),
         tool_calls
       )
 
       new(
-        json["index"].as_i,
+        json["index"]?.try(&.as_i?) || 0,
         message,
-        json["finish_reason"]?.try(&.as_s) || "stop"
+        json["finish_reason"]?.try(&.as_s?) || "stop"
       )
     end
 
@@ -1694,13 +1703,13 @@ module PygmalionAgent
       json = JSON.parse(body)
 
       response = new(
-        id: json["id"]?.try(&.as_s) || "",
-        model: json["model"]?.try(&.as_s) || "",
-        created: json["created"]?.try(&.as_i64) || Time.utc.to_unix
+        id: json["id"]?.try(&.as_s?) || "",
+        model: json["model"]?.try(&.as_s?) || "",
+        created: json["created"]?.try(&.as_i64?) || Time.utc.to_unix
       )
 
-      if choices_json = json["choices"]?
-        choices_json.as_a.each do |choice_json|
+      if choices_json = json["choices"]?.try(&.as_a?)
+        choices_json.each do |choice_json|
           response.choices << GenerationChoice.from_json(choice_json)
         end
       end
@@ -1750,21 +1759,21 @@ module PygmalionAgent
         finish_reason : String? = nil
         tool_calls : Array(ToolCall)? = nil
 
-        if choices = json["choices"]?
-          if first_choice = choices.as_a.first?
+        if choices = json["choices"]?.try(&.as_a?)
+          if first_choice = choices.first?
             if delta_json = first_choice["delta"]?
-              delta = delta_json["content"]?.try(&.as_s) || ""
+              delta = delta_json["content"]?.try(&.as_s?) || ""
 
-              if tc = delta_json["tool_calls"]?
-                tool_calls = tc.as_a.map { |t| ToolCall.from_json(t) }
+              if tc = delta_json["tool_calls"]?.try(&.as_a?)
+                tool_calls = tc.map { |t| ToolCall.from_json(t) }
               end
             end
-            finish_reason = first_choice["finish_reason"]?.try(&.as_s)
+            finish_reason = first_choice["finish_reason"]?.try(&.as_s?)
           end
         end
 
         new(
-          json["id"]?.try(&.as_s) || "",
+          json["id"]?.try(&.as_s?) || "",
           delta,
           finish_reason,
           tool_calls
@@ -1790,11 +1799,11 @@ module PygmalionAgent
     def self.from_json(body : String) : HealthStatus
       json = JSON.parse(body)
       new(
-        status: json["status"]?.try(&.as_s) || "unknown",
-        version: json["version"]?.try(&.as_s),
-        model: json["model"]?.try(&.as_s),
-        gpu_memory_used: json["gpu_memory_used"]?.try(&.as_f),
-        gpu_memory_total: json["gpu_memory_total"]?.try(&.as_f)
+        status: json["status"]?.try(&.as_s?) || "unknown",
+        version: json["version"]?.try(&.as_s?),
+        model: json["model"]?.try(&.as_s?),
+        gpu_memory_used: json["gpu_memory_used"]?.try { |v| v.as_f? || v.as_i64?.try(&.to_f) },
+        gpu_memory_total: json["gpu_memory_total"]?.try { |v| v.as_f? || v.as_i64?.try(&.to_f) }
       )
     end
 
@@ -1880,7 +1889,7 @@ module PygmalionAgent
 
       client.post(uri.path || "/", headers: headers, body: body) do |response|
         if response.status_code != 200
-          raise Exception.new("Stream request failed: #{response.status_code}")
+          raise BackendError.new("Stream request failed", response.status_code)
         end
 
         response.body_io.each_line do |line|
@@ -2101,6 +2110,7 @@ module PygmalionAgent
     property user_name : String
 
     @connected : Bool = false
+    @stored_messages : Int32 = 0
     @available_models : Array(String) = [] of String
     @health_status : HealthStatus?
 
@@ -2129,8 +2139,8 @@ module PygmalionAgent
         response = @client.get(@config.api.models_endpoint)
         if response.status_code == 200
           json = JSON.parse(response.body)
-          if data = json["data"]?
-            @available_models = data.as_a.map { |m| m["id"].as_s }
+          if data = json["data"]?.try(&.as_a?)
+            @available_models = data.map { |m| m["id"].as_s }
           end
           @connected = true
           CogUtil::Logger.info("Connected to API. Available models: #{@available_models.join(", ")}")
@@ -2160,7 +2170,8 @@ module PygmalionAgent
       begin
         response = @client.get(@config.api.health_endpoint)
         if response.status_code == 200
-          @health_status = HealthStatus.from_json(response.body)
+          # Aphrodite/vLLM answer /health with an empty 200 body.
+          @health_status = response.body.blank? ? HealthStatus.new(status: "ok") : HealthStatus.from_json(response.body)
         else
           @health_status = HealthStatus.new(status: "error")
         end
@@ -2332,7 +2343,7 @@ module PygmalionAgent
 
       if response.status_code != 200
         CogUtil::Logger.error("Generation failed: #{response.status_code} - #{response.body}")
-        raise Exception.new("Generation failed: #{response.status_code}")
+        raise BackendError.new("Generation failed", response.status_code)
       end
 
       gen_response = GenerationResponse.from_json(response.body)
@@ -2343,6 +2354,8 @@ module PygmalionAgent
           @conversation_history << text
         end
       end
+
+      store_conversation_in_atomspace if @atomspace
 
       CogUtil::Logger.info("Generated #{gen_response.usage.completion_tokens} tokens")
       gen_response
@@ -2366,6 +2379,7 @@ module PygmalionAgent
 
       # Add to history
       @conversation_history << ChatMessage.assistant(result, @config.character.name)
+      store_conversation_in_atomspace if @atomspace
 
       result
     end
@@ -2382,11 +2396,11 @@ module PygmalionAgent
       response = @client.post(@config.api.completions_endpoint, request.to_json)
 
       if response.status_code != 200
-        raise Exception.new("Completion failed: #{response.status_code}")
+        raise BackendError.new("Completion failed", response.status_code)
       end
 
       json = JSON.parse(response.body)
-      json["choices"]?.try(&.as_a.first?).try { |c| c["text"]?.try(&.as_s) } || ""
+      json["choices"]?.try(&.as_a?).try(&.first?).try { |c| c["text"]?.try(&.as_s?) } || ""
     end
 
     # Get embeddings
@@ -2395,7 +2409,7 @@ module PygmalionAgent
       response = @client.post(@config.api.embeddings_endpoint, request.to_json)
 
       if response.status_code != 200
-        raise Exception.new("Embedding failed: #{response.status_code}")
+        raise BackendError.new("Embedding failed", response.status_code)
       end
 
       EmbeddingResponse.from_json(response.body).embedding
@@ -2407,7 +2421,7 @@ module PygmalionAgent
       response = @client.post(@config.api.embeddings_endpoint, request.to_json)
 
       if response.status_code != 200
-        raise Exception.new("Embedding failed: #{response.status_code}")
+        raise BackendError.new("Embedding failed", response.status_code)
       end
 
       EmbeddingResponse.from_json(response.body).embeddings
@@ -2419,7 +2433,7 @@ module PygmalionAgent
       response = @client.post(@config.api.tokenize_endpoint, request.to_json)
 
       if response.status_code != 200
-        raise Exception.new("Tokenization failed: #{response.status_code}")
+        raise BackendError.new("Tokenization failed", response.status_code)
       end
 
       TokenizeResponse.from_json(response.body)
@@ -2431,7 +2445,7 @@ module PygmalionAgent
       response = @client.post(@config.api.detokenize_endpoint, request.to_json)
 
       if response.status_code != 200
-        raise Exception.new("Detokenization failed: #{response.status_code}")
+        raise BackendError.new("Detokenization failed", response.status_code)
       end
 
       DetokenizeResponse.from_json(response.body).text
@@ -2518,21 +2532,66 @@ module PygmalionAgent
       }
     end
 
-    # Get conversation context from AtomSpace
-    def get_cognitive_context : Array(String)
-      return [] of String unless @atomspace
+    SAID_PREDICATE     = "pygmalion:said"
+    MENTIONS_PREDICATE = "pygmalion:mentions"
+    CONTEXT_LIMIT      = 10
 
-      CogUtil::Logger.debug("Retrieving cognitive context from AtomSpace")
-      [] of String
+    # Concepts the stored conversation mentions, most frequent first.
+    def get_cognitive_context : Array(String)
+      atomspace = @atomspace
+      return [] of String unless atomspace
+
+      predicate = atomspace.get_nodes_by_name(MENTIONS_PREDICATE, AtomSpace::AtomType::PREDICATE_NODE).first?
+      return [] of String unless predicate
+
+      counts = Hash(String, Int32).new(0)
+      atomspace.get_incoming(predicate).each do |link|
+        next unless link.type == AtomSpace::AtomType::EVALUATION_LINK
+        args = link.outgoing[1]?
+        next unless args && args.link?
+        if concept = args.outgoing[1]?
+          counts[concept.name] += 1
+        end
+      end
+      counts.to_a.sort_by { |(name, n)| {-n, name} }.first(CONTEXT_LIMIT).map(&.[0])
     end
 
-    # Store conversation in AtomSpace
+    # Write conversation turns not yet stored into the AtomSpace:
+    #   (Evaluation (Predicate "pygmalion:said") (List speaker utterance))
+    #   (Evaluation (Predicate "pygmalion:mentions") (List utterance concept))
     def store_conversation_in_atomspace : Bool
-      return false unless @atomspace
+      atomspace = @atomspace
+      return false unless atomspace
 
-      CogUtil::Logger.info("Storing conversation history in AtomSpace")
+      said = atomspace.add_predicate_node(SAID_PREDICATE)
+      mentions = atomspace.add_predicate_node(MENTIONS_PREDICATE)
+      pending = @conversation_history[@stored_messages..]? || [] of ChatMessage
+
+      pending.each do |message|
+        text = message.text_content
+        next if message.role == "system" || text.empty?
+
+        speaker = atomspace.add_concept_node(message.name || message.role)
+        utterance = atomspace.add_concept_node("utterance:#{text}")
+        atomspace.add_evaluation_link(said, atomspace.add_list_link([speaker, utterance]))
+        content_words(text).each do |word|
+          concept = atomspace.add_concept_node(word)
+          atomspace.add_evaluation_link(mentions, atomspace.add_list_link([utterance, concept]))
+        end
+      end
+
+      @stored_messages = @conversation_history.size
+      CogUtil::Logger.info("Stored #{pending.size} conversation message(s) in AtomSpace")
       true
     end
+
+    private def content_words(text : String) : Array(String)
+      text.downcase.scan(/[a-z][a-z'-]{2,}/).map(&.[0]).reject { |w| STOP_WORDS.includes?(w) }.uniq
+    end
+
+    STOP_WORDS = Set{"the", "and", "for", "are", "but", "not", "you", "your", "with", "this", "that",
+                     "have", "has", "was", "were", "what", "when", "where", "who", "how", "can", "will",
+                     "just", "they", "them", "from", "about", "there", "here", "its", "it's", "i'm"}
 
     # Get agent status
     def status : Hash(String, String)
@@ -2604,12 +2663,12 @@ module PygmalionAgent
 
       @conversation_history.clear
 
-      if messages = json["messages"]?
-        messages.as_a.each do |msg|
+      if messages = json["messages"]?.try(&.as_a?)
+        messages.each do |msg|
           @conversation_history << ChatMessage.new(
             msg["role"].as_s,
-            msg["content"]?.try(&.as_s) || "",
-            msg["name"]?.try(&.as_s)
+            msg["content"]?.try(&.as_s?) || "",
+            msg["name"]?.try(&.as_s?)
           )
         end
       end
@@ -2629,9 +2688,19 @@ module PygmalionAgent
   # Factory Methods
   # ==========================================================================
 
-  # Create agent with default configuration
+  # Create agent with default configuration. The backend can be pointed
+  # elsewhere with PYGMALION_API_URL, PYGMALION_API_KEY and PYGMALION_MODEL.
   def self.create_default_agent : Agent
     config = Config.new
+    if url = ENV["PYGMALION_API_URL"]?.presence
+      config.api.base_url = url.rstrip('/')
+    end
+    if key = ENV["PYGMALION_API_KEY"]?.presence
+      config.api.api_key = key
+    end
+    if model = ENV["PYGMALION_MODEL"]?.presence
+      config.model_name = model
+    end
     Agent.new(config)
   end
 
