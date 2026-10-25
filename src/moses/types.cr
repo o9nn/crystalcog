@@ -10,16 +10,23 @@ module Moses
   VERY_WORST_SCORE = Float64::MIN
   EPSILON_SCORE    = Float64::EPSILON
 
-  # Helper method to get score or worst score
+  # Helper method to get score or worst score.
+  # NaN scores (e.g. from Inf - Inf in penalized_score) are normalized to
+  # VERY_WORST_SCORE so that downstream sort/max operations remain transitive
+  # and treat incomparable candidates consistently as worst.
   def self.score_or_worst(candidate : Candidate) : Score
-    candidate.score.try(&.penalized_score) || VERY_WORST_SCORE
+    score = candidate.score.try(&.penalized_score) || VERY_WORST_SCORE
+    score.nan? ? VERY_WORST_SCORE : score
   end
 
-  # Helper method to safely compare candidates by score
+  # Helper method to safely compare candidates by score.
+  # Relies on score_or_worst to normalize NaN; the `|| 0` guards the nilable
+  # return type of Float64#<=> (which is Int32?).
   def self.compare_candidates(a : Candidate, b : Candidate) : Int32
     score_a = score_or_worst(a)
     score_b = score_or_worst(b)
-    score_a <=> score_b
+    (score_a <=> score_b) || 0
+    (score_or_worst(a) <=> score_or_worst(b)) || 0
   end
 
   # Complexity type for measuring program complexity
@@ -166,7 +173,7 @@ module Moses
 
     private def execute_boolean(inputs : Array(Float64)) : Bool
       # Execute as boolean expression
-      if tree = @parsed_tree
+      if tree = parse!
         tree.evaluate_boolean(inputs)
       else
         # Fallback to string evaluation
@@ -176,7 +183,7 @@ module Moses
 
     private def execute_regression(inputs : Array(Float64)) : Float64
       # Execute as mathematical expression
-      if tree = @parsed_tree
+      if tree = parse!
         tree.evaluate_numeric(inputs)
       else
         # Fallback to string evaluation
@@ -405,7 +412,7 @@ module Moses
 
   # Program candidate representation
   # Now uses structured Program representation while maintaining compatibility
-  struct Candidate
+  class Candidate
     property program : String          # String representation for compatibility
     property parsed_program : Program? # Structured representation
     property score : CompositeScore?
@@ -417,8 +424,9 @@ module Moses
       @parsed_program = nil
     end
 
-    def initialize(@parsed_program : Program, @generation : Int32 = 0, @evaluations : Int32 = 0)
-      @program = @parsed_program.expression
+    def initialize(parsed_program : Program, @generation : Int32 = 0, @evaluations : Int32 = 0)
+      @parsed_program = parsed_program
+      @program = parsed_program.expression
       @score = nil
     end
 
@@ -456,12 +464,11 @@ module Moses
   # Simple program parser for converting strings to trees
   module ProgramParser
     def self.parse(expression : String) : ProgramNode?
-      # Simple parser - in production this would be more sophisticated
       tokens = tokenize(expression)
       return nil if tokens.empty?
 
       begin
-        parse_expression(tokens)
+        parse_expression(tokens, 0)
       rescue
         nil
       end
@@ -476,16 +483,24 @@ module Moses
         .reject(&.empty?)
     end
 
-    private def self.parse_expression(tokens : Array(String)) : ProgramNode?
-      return nil if tokens.empty?
+    # Precedence climbing, loosest first: or | and | + - | * /, then unary.
+    PRECEDENCE = [
+      {"or", "|", "||"},
+      {"and", "&", "&&"},
+      {"+", "-"},
+      {"*", "/"},
+    ]
 
-      # Simple expression parsing
-      left = parse_term(tokens)
+    private def self.parse_expression(tokens : Array(String), level : Int32 = 0) : ProgramNode?
+      return nil if tokens.empty?
+      return parse_term(tokens) if level >= PRECEDENCE.size
+
+      left = parse_expression(tokens, level + 1)
       return left unless left
 
-      while !tokens.empty? && (tokens[0] == "and" || tokens[0] == "or" || tokens[0] == "+" || tokens[0] == "-")
+      while !tokens.empty? && PRECEDENCE[level].includes?(tokens[0])
         op = tokens.shift
-        right = parse_term(tokens)
+        right = parse_expression(tokens, level + 1)
         return left unless right
 
         left = BinaryOpNode.new(op, left, right)
@@ -507,7 +522,7 @@ module Moses
         UnaryOpNode.new("not", operand)
       when "("
         tokens.shift # consume "("
-        expr = parse_expression(tokens)
+        expr = parse_expression(tokens, 0)
         tokens.shift if !tokens.empty? && tokens[0] == ")" # consume ")"
         expr
       else
@@ -529,6 +544,10 @@ module Moses
   # Program executor for string-based execution (fallback)
   module ProgramExecutor
     def self.execute_boolean(expression : String, inputs : Array(Float64)) : Bool
+      if tree = ProgramParser.parse(expression)
+        return tree.evaluate_boolean(inputs)
+      end
+
       # Substitute variables with boolean values
       expr = expression.dup
       inputs.each_with_index do |value, index|
@@ -541,6 +560,10 @@ module Moses
     end
 
     def self.execute_numeric(expression : String, inputs : Array(Float64)) : Float64
+      if tree = ProgramParser.parse(expression)
+        return tree.evaluate_numeric(inputs)
+      end
+
       # Substitute variables with numeric values
       expr = expression.dup
       inputs.each_with_index do |value, index|

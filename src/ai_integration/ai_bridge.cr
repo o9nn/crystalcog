@@ -40,7 +40,7 @@ module AIIntegration
   end
 
   # AI Inference Response
-  struct InferenceResponse
+  class InferenceResponse
     property text : String
     property session_id : String
     property tokens_generated : UInt32
@@ -153,12 +153,12 @@ module AIIntegration
       end
 
       # Simulate AI inference (in real implementation, this would call C++ AI functions)
-      start_time = Time.monotonic
+      start_time = Time.instant
 
       # Generate a simple response based on the prompt
       response_text = generate_demo_response(request.prompt)
 
-      end_time = Time.monotonic
+      end_time = Time.instant
       inference_time = (end_time - start_time).total_milliseconds.to_u64
 
       # InferenceResponse is a struct: a tap block receives a value copy.
@@ -316,17 +316,34 @@ module AIIntegration
 
       # Use PLN to find related concepts
       if pln = @pln_engine
-        # In a real implementation, this would use PLN to find semantic relationships
-        enrichments << "PLN analysis: Found semantic relationships in knowledge base"
+        derived = pln.forward_chain(AtomSpace::AtomType::INHERITANCE_LINK, 2)
+        related = concept_relations(concept_node)
+        enrichments << "PLN analysis: #{derived.size} new inference(s); #{related.size} relationship(s) involve #{concept}"
+        related.first(5).each { |rel| enrichments << "  PLN: #{rel}" }
       end
 
       # Use URE to derive properties
       if ure = @ure_engine
-        # In a real implementation, this would use URE to derive properties
-        enrichments << "URE analysis: Derived logical properties and relationships"
+        derived = ure.forward_chain(3)
+        touching = derived.select { |atom| mentions?(atom, concept_node) }
+        enrichments << "URE analysis: #{derived.size} derivation(s), #{touching.size} about #{concept}"
+        touching.first(5).each { |atom| enrichments << "  URE: #{atom}" }
       end
 
       enrichments
+    end
+
+    # Links that have `concept` anywhere in their outgoing tree, with their truth values.
+    private def concept_relations(concept : AtomSpace::Atom) : Array(String)
+      @atomspace.get_incoming(concept).map do |link|
+        "#{link} (s=#{link.truth_value.strength.round(3)}, c=#{link.truth_value.confidence.round(3)})"
+      end
+    end
+
+    private def mentions?(atom : AtomSpace::Atom, target : AtomSpace::Atom, depth : Int32 = 0) : Bool
+      return true if atom.handle == target.handle
+      return false if depth > 16 || !atom.link?
+      atom.outgoing.any? { |child| mentions?(child, target, depth + 1) }
     end
 
     def interactive_reasoning_session(user_input : String) : String

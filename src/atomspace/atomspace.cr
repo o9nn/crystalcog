@@ -218,6 +218,15 @@ module AtomSpace
       end
     end
 
+    # Get a single atom by name (returns first match, or nil)
+    def get_atom_by_name(name : String) : Atom?
+      @mutex.synchronize do
+        name_set = @atoms_by_name[name]?
+        return nil unless name_set
+        name_set.first?
+      end
+    end
+
     # Get nodes by name
     def get_nodes_by_name(name : String, type : AtomType? = nil) : Array(Atom)
       @mutex.synchronize do
@@ -252,10 +261,40 @@ module AtomSpace
       @link_count
     end
 
-    # Check if atom exists
+    # Check if this exact atom (by handle) is stored. Use #find_equivalent to
+    # test for a stored atom with the same content.
     def contains?(atom : Atom) : Bool
       @mutex.synchronize do
         @atoms_by_handle.has_key?(atom.handle)
+      end
+    end
+
+    # Return the stored atom that is content-equivalent to `atom`, resolving
+    # nested links bottom-up so freshly built outgoing sets still match.
+    def find_equivalent(atom : Atom) : Atom?
+      @mutex.synchronize { resolve_equivalent(atom) }
+    end
+
+    private def resolve_equivalent(atom : Atom) : Atom?
+      if stored = @atoms_by_handle[atom.handle]?
+        return stored
+      end
+
+      case atom
+      when Node
+        find_existing_atom(atom)
+      when Link
+        handles = [] of Handle
+        atom.outgoing.each do |child|
+          resolved = resolve_equivalent(child)
+          return nil unless resolved
+          handles << resolved.handle
+        end
+        @atoms_by_outgoing[handles]?.try &.find { |existing| existing.type == atom.type }
+      when LazyLink
+        find_existing_atom(atom)
+      else
+        nil
       end
     end
 

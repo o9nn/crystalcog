@@ -15,7 +15,12 @@ permissions:
   contents: read
 
 env:
-  CRYSTAL_VERSION: '1.14.0'
+  CRYSTAL_VERSION: '1.20.1'
+
+# Trace every command so CI logs show exactly what ran and what it printed.
+defaults:
+  run:
+    shell: bash -ex {0}
 
 jobs:
   # Build release binaries for multiple platforms
@@ -61,7 +66,7 @@ jobs:
     - name: Build release binary
       run: |
         echo "Building release binary for ${{ matrix.os }}..."
-        crystal build --release --no-debug src/bin/crystalcog.cr -o ${{ matrix.binary_path }}
+        crystal build --verbose --stats --release --no-debug src/bin/crystalcog.cr -o ${{ matrix.binary_path }}
         
         # Verify binary
         ls -lh ${{ matrix.binary_path }}

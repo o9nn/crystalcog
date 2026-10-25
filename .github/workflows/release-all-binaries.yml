@@ -32,6 +32,11 @@ env:
 
 # Define all binaries to build
 # This list matches shard.yml targets
+# Trace every command so CI logs show exactly what ran and what it printed.
+defaults:
+  run:
+    shell: bash -ex {0}
+
 jobs:
   # Build matrix for all binaries on Linux x86_64
   build-linux-x64:
