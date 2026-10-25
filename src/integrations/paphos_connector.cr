@@ -12,6 +12,7 @@ require "json"
 require "http/client"
 require "../cogutil/logger"
 require "../atomspace/atomspace"
+require "./platform/paphos_client"
 
 module PaphosBackend
   VERSION = "0.2.0"
@@ -36,10 +37,12 @@ module PaphosBackend
     property state_sync_interval : Int32     # seconds
     property event_streaming_enabled : Bool
     property batch_operations : Bool
+    property email : String?
+    property password : String?
 
     def initialize(
-      @backend_url = "http://localhost:3000",
-      @api_key = nil,
+      @backend_url = ENV["PAPHOS_BACKEND_URL"]? || "http://localhost:3000",
+      @api_key = ENV["PAPHOS_API_KEY"]?,
       @timeout = 30,
       @retry_attempts = 3,
       @enable_caching = true,
@@ -49,7 +52,9 @@ module PaphosBackend
       @grip_coordination_mode = :peer,
       @state_sync_interval = 5,
       @event_streaming_enabled = true,
-      @batch_operations = true
+      @batch_operations = true,
+      @email = ENV["PAPHOS_EMAIL"]?,
+      @password = ENV["PAPHOS_PASSWORD"]?
     )
     end
 
@@ -183,76 +188,57 @@ module PaphosBackend
     property token_expiry : Time?
     property refresh_token : String?
     property authenticated : Bool
+    property client : PaphosBackend::Client?
+    property email : String?
+    property password : String?
 
-    def initialize(@api_key : String? = nil)
+    def initialize(@api_key : String? = nil, @client = nil, @email = nil, @password = nil)
       @token = nil
       @token_expiry = nil
       @refresh_token = nil
       @authenticated = false
     end
 
-    # Authenticate with Paphos backend via Lucky API
+    # Log in to the Paphos backend (POST /api/v1/users/login). An api_key is
+    # treated as a ready-made bearer token. Without either, stay
+    # unauthenticated rather than inventing a token.
     def authenticate : Bool
       CogUtil::Logger.info("Authenticating with Paphos backend (Lucky API)")
 
-      begin
-        # Simulate Lucky framework session authentication
-        @token = "paphos_token_#{Time.utc.to_unix}"
-        @refresh_token = "paphos_refresh_#{Time.utc.to_unix}"
-        @token_expiry = Time.utc + 1.hour
-        @authenticated = true
-
-        CogUtil::Logger.info("Authentication successful")
-        true
-      rescue ex
-        CogUtil::Logger.error("Authentication failed: #{ex.message}")
-        false
+      if (client = @client) && (email = @email) && (password = @password)
+        @token = client.login(email, password)
+      elsif key = @api_key
+        @token = key
+      else
+        CogUtil::Logger.warn("No Paphos credentials configured (set PAPHOS_EMAIL/PAPHOS_PASSWORD or PAPHOS_API_KEY)")
+        return false
       end
-    end
-
-    # Validate authentication token
-    def validate_token : Bool
-      return false unless @authenticated && @token
-
-      if expiry = @token_expiry
-        if Time.utc > expiry
-          CogUtil::Logger.debug("Token expired, attempting refresh")
-          return refresh_auth_token
-        end
-      end
-
+      @authenticated = true
+      CogUtil::Logger.info("Authentication successful")
       true
+    rescue ex : PaphosBackend::Client::Error | IO::Error | Socket::Error
+      CogUtil::Logger.error("Authentication failed: #{ex.message}")
+      @authenticated = false
+      false
     end
 
-    # Refresh authentication token
+    # Paphos JWTs do not expire, so a token is valid until logout.
+    def validate_token : Bool
+      @authenticated && !@token.nil?
+    end
+
     def refresh_auth_token : Bool
-      return false unless @refresh_token
-
-      CogUtil::Logger.debug("Refreshing authentication token")
-
-      begin
-        @token = "paphos_token_#{Time.utc.to_unix}"
-        @token_expiry = Time.utc + 1.hour
-        true
-      rescue ex
-        CogUtil::Logger.error("Token refresh failed: #{ex.message}")
-        @authenticated = false
-        false
-      end
+      authenticate
     end
 
-    # Get authorization header
     def auth_header : Hash(String, String)
       if token = @token
         {"Authorization" => "Bearer #{token}"}
-      elsif key = @api_key
-        {"X-API-Key" => key}
       else
         {} of String => String
       end
     end
 
-    # Logout and clear tokens
     def logout
       @token = nil
       @refresh_token = nil
@@ -493,9 +479,11 @@ module PaphosBackend
     property cognitive_coordinator : CognitiveAgencyCoordinator
     property atomspace : AtomSpace::AtomSpace?
     property connected : Bool
+    getter client : PaphosBackend::Client
 
     def initialize(@config : Config)
-      @auth_handler = AuthHandler.new(@config.api_key)
+      @client = PaphosBackend::Client.new(@config.api_endpoint(""), timeout: @config.timeout.seconds)
+      @auth_handler = AuthHandler.new(@config.api_key, @client, @config.email, @config.password)
       @persistence = PersistenceLayer.new(@config.backend_url, @config.lucky_api_prefix, @config.enable_caching)
       @event_stream = EventStreamHandler.new(@config.backend_url)
       @cognitive_coordinator = CognitiveAgencyCoordinator.new(@config.grip_coordination_mode)
@@ -516,6 +504,7 @@ module PaphosBackend
         CogUtil::Logger.error("Failed to authenticate with Paphos backend")
         return false
       end
+      @client.token = @auth_handler.token
 
       # Connect event stream if enabled
       if @config.event_streaming_enabled
@@ -662,9 +651,11 @@ module PaphosBackend
       return false unless @connected
       return false unless @auth_handler.validate_token
 
-      # Test with lightweight coordination
-      result = @cognitive_coordinator.coordinate_grip({"test" => "connection"})
-      result["coherence"]? != nil
+      # A real round trip: an authenticated read of the character list.
+      @client.characters
+      true
+    rescue PaphosBackend::Client::Error | IO::Error | Socket::Error
+      false
     end
 
     # Disconnect from backend
