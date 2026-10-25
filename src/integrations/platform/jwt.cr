@@ -23,7 +23,7 @@ module PygmalionPlatform
       raise Error.new("malformed token") unless parts.size == 3
 
       expected = sign("#{parts[0]}.#{parts[1]}", secret)
-      unless Crypto::Subtle.constant_time_compare(expected, parts[2])
+      unless Crypto::Subtle.constant_time_compare(expected.to_slice, parts[2].to_slice)
         raise Error.new("bad signature")
       end
 

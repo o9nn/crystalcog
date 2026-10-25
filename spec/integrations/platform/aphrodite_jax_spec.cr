@@ -1,4 +1,5 @@
 require "spec"
+require "file_utils"
 require "http/client"
 require "../../../src/integrations/platform/aphrodite_jax_server"
 

@@ -1,4 +1,5 @@
 require "spec"
+require "file_utils"
 require "http/server"
 require "../../../src/integrations/platform/paphos_server"
 require "../../../src/integrations/platform/galatea_server"

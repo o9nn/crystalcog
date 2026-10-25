@@ -121,7 +121,14 @@ module AphroditeEngine
       candidates = [] of String
       Process.executable_path.try { |exe| candidates << File.join(File.dirname(exe), "aphrodite_jax_server") }
       candidates << File.expand_path("../../../bin/aphrodite_jax_server", __DIR__)
-      candidates.find { |c| File::Info.executable?(c) } || Process.find_executable("aphrodite_jax_server") || "aphrodite_jax_server"
+      candidates.find { |c| executable_file?(c) } || Process.find_executable("aphrodite_jax_server") || "aphrodite_jax_server"
+    end
+
+    # Portable across Crystal versions (File.executable? is deprecated in
+    # 1.14, File::Info.executable? does not exist before it).
+    private def self.executable_file?(path : String) : Bool
+      info = File.info?(path)
+      !info.nil? && info.file? && info.permissions.owner_execute?
     end
 
     def running? : Bool
@@ -175,12 +182,16 @@ module AphroditeEngine
     def stop
       return unless process = @process
       return if process.terminated?
-      process.terminate(graceful: true)
-      20.times do
-        return if process.terminated?
-        sleep 250.milliseconds
-      end
-      process.terminate(graceful: false) unless process.terminated?
+      {% if flag?(:win32) %}
+        process.terminate
+      {% else %}
+        process.signal(Signal::TERM)
+        20.times do
+          return if process.terminated?
+          sleep 250.milliseconds
+        end
+        process.signal(Signal::KILL) unless process.terminated?
+      {% end %}
     rescue RuntimeError
     ensure
       @process = nil
