@@ -352,6 +352,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-linux-x64, build-linux-arm64, build-macos-x64, build-macos-arm64, build-docker]
     permissions:
+      actions: read
       contents: write
 
     steps:
@@ -362,6 +363,44 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         path: release-artifacts/
+
+    - name: Wait for main release artifacts
+      if: github.event_name == 'push'
+      id: main_run
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        for attempt in $(seq 1 60); do
+          RUN=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/release.yml/runs?event=push&head_sha=${GITHUB_SHA}&per_page=100" \
+            --jq '.workflow_runs | if length > 0 then sort_by(.created_at)[-1] else empty end')
+          if [ -n "$RUN" ]; then
+            STATUS=$(jq -r '.status // empty' <<< "$RUN")
+            CONCLUSION=$(jq -r '.conclusion // empty' <<< "$RUN")
+
+            if [ "$STATUS" = "completed" ]; then
+              if [ "$CONCLUSION" != "success" ]; then
+                echo "Main release workflow completed with conclusion: $CONCLUSION" >&2
+                exit 1
+              fi
+              echo "run_id=$(jq -r '.id' <<< "$RUN")" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+
+          echo "Waiting for main release workflow to complete (attempt $attempt/60)..."
+          sleep 30
+        done
+
+        echo "Timed out waiting for the main release workflow" >&2
+        exit 1
+
+    - name: Download main release artifacts
+      if: github.event_name == 'push'
+      uses: actions/download-artifact@v4
+      with:
+        run-id: ${{ steps.main_run.outputs.run_id }}
+        github-token: ${{ github.token }}
+        path: release-main-artifacts/
 
     - name: Get version
       id: get_version
@@ -453,6 +492,9 @@ jobs:
         mkdir -p release-files
         find release-artifacts/ -name "*.tar.gz" -exec cp {} release-files/ \;
         find release-artifacts/ -name "*.sha256" -exec cp {} release-files/ \;
+        if [ -d release-main-artifacts ]; then
+          find release-main-artifacts/ -name "*.tar.gz" -exec cp {} release-files/ \;
+        fi
         ls -lh release-files/
 
     - name: Create Release

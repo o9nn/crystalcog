@@ -78,80 +78,6 @@ jobs:
         path: ${{ matrix.artifact_name }}.tar.gz
         retention-days: 30
 
-  # Create GitHub release
-  create-release:
-    name: Create GitHub Release
-    runs-on: ubuntu-latest
-    needs: build-release
-    permissions:
-      contents: write
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Download all artifacts
-      uses: actions/download-artifact@v4
-      with:
-        path: release-artifacts
-
-    - name: Get version
-      id: get_version
-      run: |
-        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-          VERSION="${{ github.event.inputs.version }}"
-        else
-          VERSION=${GITHUB_REF#refs/tags/}
-        fi
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
-        echo "Release version: $VERSION"
-
-    - name: Generate release notes
-      run: |
-        cat > RELEASE_NOTES.md << 'EOF'
-        # CrystalCog ${{ steps.get_version.outputs.version }}
-        
-        ## What's New
-        
-        This release includes:
-        - Latest bug fixes and improvements
-        - Performance optimizations
-        - Enhanced stability
-        
-        ## Installation
-        
-        Download the appropriate binary for your platform:
-        - **Linux**: `crystalcog-main-linux-x86_64.tar.gz`
-        - **macOS**: `crystalcog-main-macos-x86_64.tar.gz`
-        
-        Extract and run:
-        ```bash
-        tar -xzf crystalcog-*.tar.gz
-        ./crystalcog --version
-        ```
-        
-        ## Changes
-        
-        See the [commit history](https://github.com/${{ github.repository }}/commits/main) for detailed changes.
-        
-        ## Documentation
-        
-        - [README](https://github.com/${{ github.repository }}/blob/main/README.md)
-        - [Examples](https://github.com/${{ github.repository }}/tree/main/examples)
-        
-        EOF
-
-    - name: Create Release
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: ${{ steps.get_version.outputs.version }}
-        name: CrystalCog ${{ steps.get_version.outputs.version }}
-        body_path: RELEASE_NOTES.md
-        draft: false
-        prerelease: false
-        files: |
-          release-artifacts/**/*.tar.gz
-
   # Build and push Docker image
   docker-build:
     name: Build and Push Docker Image
@@ -224,7 +150,7 @@ jobs:
   publish-packages:
     name: Publish Packages
     runs-on: ubuntu-latest
-    needs: create-release
+    needs: build-release
     
     steps:
     - name: Checkout repository
@@ -245,7 +171,7 @@ jobs:
   notify:
     name: Deployment Notification
     runs-on: ubuntu-latest
-    needs: [build-release, create-release, docker-build, publish-packages]
+    needs: [build-release, docker-build, publish-packages]
     if: always()
     
     steps:
@@ -268,7 +194,6 @@ jobs:
         echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
         echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
         echo "| Build Release | ${{ needs.build-release.result }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| GitHub Release | ${{ needs.create-release.result }} |" >> $GITHUB_STEP_SUMMARY
         echo "| Docker Image | ${{ needs.docker-build.result }} |" >> $GITHUB_STEP_SUMMARY
         echo "| Package Publish | ${{ needs.publish-packages.result }} |" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
