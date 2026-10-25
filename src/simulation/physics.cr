@@ -6,15 +6,15 @@
 module Simulation
   # Physics body types
   enum PhysicsBodyType
-    Static    # Doesn't move, infinite mass
-    Dynamic   # Affected by forces and collisions
-    Kinematic # Moved by code, not by physics
+    Static     # Doesn't move, infinite mass
+    Dynamic    # Affected by forces and collisions
+    Kinematic  # Moved by code, not by physics
   end
 
   # Physics material properties
   struct PhysicsMaterial
     property friction : Float64 = 0.5
-    property restitution : Float64 = 0.3 # Bounciness
+    property restitution : Float64 = 0.3  # Bounciness
     property density : Float64 = 1.0
 
     def initialize(@friction = 0.5, @restitution = 0.3, @density = 1.0)
@@ -43,7 +43,7 @@ module Simulation
     property is_trigger : Bool = false
 
     abstract def contains_point?(point : Vector3) : Bool
-    abstract def bounds : {Vector3, Vector3} # min, max
+    abstract def bounds : {Vector3, Vector3}  # min, max
   end
 
   # Sphere collider
@@ -180,7 +180,7 @@ module Simulation
 
         # Update angular velocity from torques
         # Simplified: assuming uniform sphere for inertia
-        inertia = @mass * 0.4 # Approximate
+        inertia = @mass * 0.4  # Approximate
         if inertia > 0.0
           angular_acceleration = @accumulated_torque / inertia
           @angular_velocity = @angular_velocity + angular_acceleration * dt

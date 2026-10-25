@@ -95,9 +95,9 @@ module NLP
         "average_word_length"     => avg_word_length,
         "average_sentence_length" => avg_sentence_length,
         # Retain the concise names used by the CLI and linguistic-analysis API.
-        "avg_word_length"     => avg_word_length,
-        "avg_sentence_length" => avg_sentence_length,
-        "unique_words"        => word_tokens.uniq.size,
+        "avg_word_length"         => avg_word_length,
+        "avg_sentence_length"     => avg_sentence_length,
+        "unique_words"            => word_tokens.uniq.size,
       }
     end
 

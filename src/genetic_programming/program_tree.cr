@@ -12,6 +12,7 @@ require "../cogutil/cogutil"
 require "../atomspace/atomspace_main"
 
 module GeneticProgramming
+
   # Exception classes for Genetic Programming
   class GPException < CogUtil::OpenCogException
   end
@@ -28,8 +29,8 @@ module GeneticProgramming
   # Program node types for the AST
   enum NodeType
     # Terminal nodes (leaves)
-    Constant        # Numeric or boolean constant
-    Variable        # Input variable reference
+    Constant      # Numeric or boolean constant
+    Variable      # Input variable reference
     EphemeralRandom # Randomly generated constant
 
     # Function nodes (internal)
@@ -264,7 +265,7 @@ module GeneticProgramming
           raise EvaluationException.new("Variable index #{idx} out of bounds")
         end
 
-        # Boolean operations
+      # Boolean operations
       when .and?
         left = @children[0].evaluate(variables)
         right = @children[1].evaluate(variables)
@@ -289,7 +290,7 @@ module GeneticProgramming
         right = @children[1].evaluate(variables)
         (left.as(Bool) == right.as(Bool))
 
-        # Arithmetic operations
+      # Arithmetic operations
       when .add?
         left = @children[0].evaluate(variables).as(Float64)
         right = @children[1].evaluate(variables).as(Float64)
@@ -324,7 +325,7 @@ module GeneticProgramming
         child = @children[0].evaluate(variables).as(Float64)
         child.abs
 
-        # Comparison operations
+      # Comparison operations
       when .less_than?
         left = @children[0].evaluate(variables).as(Float64)
         right = @children[1].evaluate(variables).as(Float64)
@@ -350,7 +351,7 @@ module GeneticProgramming
         right = @children[1].evaluate(variables).as(Float64)
         (left - right).abs >= 1e-10
 
-        # Mathematical functions
+      # Mathematical functions
       when .sin?
         child = @children[0].evaluate(variables).as(Float64)
         Math.sin(child)
@@ -382,7 +383,7 @@ module GeneticProgramming
         right = @children[1].evaluate(variables).as(Float64)
         Math.min(left, right)
 
-        # Control flow
+      # Control flow
       when .if?
         condition = @children[0].evaluate(variables).as(Bool)
         if condition
@@ -397,6 +398,7 @@ module GeneticProgramming
         else
           @children[2].evaluate(variables)
         end
+
       else
         raise EvaluationException.new("Unsupported node type: #{@node_type}")
       end
@@ -413,7 +415,8 @@ module GeneticProgramming
         @value.to_s
       when .variable?
         "$#{@variable_index}"
-        # Boolean operations
+
+      # Boolean operations
       when .and?
         "(#{@children[0].to_s_impl} AND #{@children[1].to_s_impl})"
       when .or?
@@ -426,7 +429,8 @@ module GeneticProgramming
         "(#{@children[0].to_s_impl} => #{@children[1].to_s_impl})"
       when .equivalent?
         "(#{@children[0].to_s_impl} <=> #{@children[1].to_s_impl})"
-        # Arithmetic operations
+
+      # Arithmetic operations
       when .add?
         "(#{@children[0].to_s_impl} + #{@children[1].to_s_impl})"
       when .subtract?
@@ -443,7 +447,8 @@ module GeneticProgramming
         "-(#{@children[0].to_s_impl})"
       when .abs?
         "abs(#{@children[0].to_s_impl})"
-        # Comparison operations
+
+      # Comparison operations
       when .less_than?
         "(#{@children[0].to_s_impl} < #{@children[1].to_s_impl})"
       when .greater_than?
@@ -456,7 +461,8 @@ module GeneticProgramming
         "(#{@children[0].to_s_impl} == #{@children[1].to_s_impl})"
       when .not_equal?
         "(#{@children[0].to_s_impl} != #{@children[1].to_s_impl})"
-        # Mathematical functions
+
+      # Mathematical functions
       when .sin?
         "sin(#{@children[0].to_s_impl})"
       when .cos?
@@ -473,11 +479,13 @@ module GeneticProgramming
         "max(#{@children[0].to_s_impl}, #{@children[1].to_s_impl})"
       when .min?
         "min(#{@children[0].to_s_impl}, #{@children[1].to_s_impl})"
-        # Control flow
+
+      # Control flow
       when .if?
         "if(#{@children[0].to_s_impl}, #{@children[1].to_s_impl})"
       when .if_then_else?
         "if(#{@children[0].to_s_impl}, #{@children[1].to_s_impl}, #{@children[2].to_s_impl})"
+
       else
         "#{@node_type}(#{@children.map(&.to_s_impl).join(", ")})"
       end

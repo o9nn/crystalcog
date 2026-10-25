@@ -5,7 +5,7 @@ require "./ros_bridge"
 require "./messages"
 
 # The messages are defined in CrystalCog::Robotics::ROS namespace
-# The bridge is defined in Robotics::ROS namespace
+# The bridge is defined in Robotics::ROS namespace  
 # We need to unify them
 
 module CrystalCog::Robotics::ROS

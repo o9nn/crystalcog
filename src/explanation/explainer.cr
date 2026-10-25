@@ -33,12 +33,12 @@ module Explanation
 
   # Explanation types
   enum ExplanationType
-    CAUSAL         # Why did X cause Y?
-    CONTRASTIVE    # Why X instead of Y?
-    COUNTERFACTUAL # What if X were different?
-    TRACE          # How was conclusion reached?
-    RULE_BASED     # Which rules were applied?
-    FEATURE_BASED  # Which features contributed?
+    CAUSAL           # Why did X cause Y?
+    CONTRASTIVE      # Why X instead of Y?
+    COUNTERFACTUAL   # What if X were different?
+    TRACE            # How was conclusion reached?
+    RULE_BASED       # Which rules were applied?
+    FEATURE_BASED    # Which features contributed?
   end
 
   # Reasoning step in a trace

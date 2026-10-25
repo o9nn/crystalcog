@@ -8,7 +8,7 @@ module Simulation
   abstract class Sensor
     property name : String
     property enabled : Bool = true
-    property update_rate : Float64 = 0.0 # 0 = every frame
+    property update_rate : Float64 = 0.0  # 0 = every frame
     property agent : Agent?
 
     @last_update : Float64 = 0.0
@@ -96,7 +96,7 @@ module Simulation
   # Range sensor - distance to nearest object in forward direction
   class RangeSensor < Sensor
     property range : Float64
-    property field_of_view : Float64 # In radians
+    property field_of_view : Float64  # In radians
     @cached_value : Float64 = Float64::MAX
 
     def initialize(name : String = "range", @range : Float64 = 10.0, @field_of_view : Float64 = 0.0)
@@ -145,7 +145,7 @@ module Simulation
   class LidarSensor < Sensor
     property range : Float64
     property num_rays : Int32
-    property scan_angle : Float64 # Total scan angle in radians
+    property scan_angle : Float64  # Total scan angle in radians
     @cached_value : Array(Float64) = [] of Float64
 
     def initialize(
@@ -291,7 +291,7 @@ module Simulation
   # Communication sensor - detects messages from other agents
   class CommunicationSensor < Sensor
     @received_messages : Array(NamedTuple(sender: String, message: String, time: Float64))
-    @cached_value : Float64 = 0.0 # Number of unread messages
+    @cached_value : Float64 = 0.0  # Number of unread messages
 
     def initialize(name : String = "communication")
       super(name)

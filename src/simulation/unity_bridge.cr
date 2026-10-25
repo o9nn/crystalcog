@@ -17,13 +17,13 @@ module Simulation
 
   # Unity message types
   enum UnityMessageType
-    Command     # Send command to Unity
-    StateUpdate # Receive state update from Unity
-    Event       # Receive event notification
-    Spawn       # Create entity in Unity
-    Destroy     # Remove entity from Unity
-    Query       # Query Unity state
-    Response    # Response to query
+    Command       # Send command to Unity
+    StateUpdate   # Receive state update from Unity
+    Event         # Receive event notification
+    Spawn         # Create entity in Unity
+    Destroy       # Remove entity from Unity
+    Query         # Query Unity state
+    Response      # Response to query
   end
 
   # Unity Bridge - connects to Unity3D via HTTP/WebSocket
