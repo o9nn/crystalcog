@@ -105,6 +105,8 @@ rpc ChatService/ChatSendMessage "{\"chatId\":\"$CHAT\",\"message\":\"How do you 
 
 `ChatSubscribe` (server streaming) and `AuthService/Verify` return `unimplemented`.
 
+Chat messages that start with `/` are crystalcog commands, such as `/inherit cat animal`, `/reason 3` or `/query cat`. They run against the platform's AtomSpace without calling the model. With `PLATFORM_TOOLS=1`, which is the default for the `aphrodite_jax` backend, the model can also call crystalcog's tools while it replies. See [COGCHAT.md](COGCHAT.md), which also covers the `crystalcog chat`, `generate`, `tokenize`, `cog`, `tool` and `engine` commands.
+
 ## Verification
 
 - **Specs:** `crystal spec spec/integrations/platform/` covers:

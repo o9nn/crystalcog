@@ -79,6 +79,8 @@ module AphroditeJax
     @k_cache : Array(Slice(Float32))
     @v_cache : Array(Slice(Float32))
     @inv_freq : Array(Float64)
+    @logits : Slice(Float32)
+    @buffers : Buffers? = nil
 
     def self.load(dir : String, max_len : Int32 = 2048) : Qwen3
       config = Qwen3Config.new(JSON.parse(File.read(File.join(dir, "config.json"))))
@@ -95,11 +97,13 @@ module AphroditeJax
       @k_cache = (0...c.layers).map { Slice(Float32).new(@max_len * kv) }
       @v_cache = (0...c.layers).map { Slice(Float32).new(@max_len * kv) }
       half = c.head_dim // 2
+      @logits = Slice(Float32).new(c.vocab)
       @inv_freq = (0...half).map { |i| 1.0 / (c.rope_theta ** (2.0 * i / c.head_dim)) }
     end
 
     # Run `tokens` at positions start_pos... through the model, filling the
-    # KV cache, and return the logits of the last token.
+    # KV cache, and return the logits of the last token. The returned slice
+    # is reused: it is valid until the next call.
     def forward(tokens : Array(Int32), start_pos : Int32) : Slice(Float32)
       c = @config
       n = tokens.size
@@ -111,23 +115,23 @@ module AphroditeJax
       group = c.heads // c.kv_heads
       scale = (1.0 / Math.sqrt(hd)).to_f32
 
-      x = Slice(Float32).new(n * d)
+      buf = buffers(n)
+      x = buf.x[0, n * d]
       tokens.each_with_index do |tok, t|
         raise ArgumentError.new("token id #{tok} out of range") unless 0 <= tok < c.vocab
         row = @embed.to_unsafe + tok.to_i64 * d
         d.times { |i| x[t * d + i] = AphroditeJax.bf16_to_f32(row[i]) }
       end
 
-      h = Slice(Float32).new(n * d)
-      q = Slice(Float32).new(n * q_dim)
-      k = Slice(Float32).new(n * kv_dim)
-      v = Slice(Float32).new(n * kv_dim)
-      attn = Slice(Float32).new(n * q_dim)
-      o = Slice(Float32).new(n * d)
-      gate = Slice(Float32).new(n * c.intermediate)
-      up = Slice(Float32).new(n * c.intermediate)
-      scores = Slice(Float32).new(start_pos + n)
-      tmp = Slice(Float32).new(hd)
+      h = buf.h[0, n * d]
+      q = buf.q[0, n * q_dim]
+      k = buf.k[0, n * kv_dim]
+      v = buf.v[0, n * kv_dim]
+      attn = buf.attn[0, n * q_dim]
+      o = buf.o[0, n * d]
+      gate = buf.gate[0, n * c.intermediate]
+      up = buf.up[0, n * c.intermediate]
+      tmp = buf.tmp
 
       @layers.each_with_index do |layer, li|
         n.times { |t| Kernels.rmsnorm(h[t * d, d], x[t * d, d], layer.attn_norm, c.eps) }
@@ -153,22 +157,27 @@ module AphroditeJax
           (vc.to_unsafe + pos.to_i64 * kv_dim).copy_from(v.to_unsafe + t * kv_dim, kv_dim)
         end
 
-        # Causal attention over the cache (positions 0..pos).
-        n.times do |t|
-          pos = start_pos + t
-          c.heads.times do |hh|
-            qp = q.to_unsafe + t * q_dim + hh * hd
-            kvh = hh // group
-            (pos + 1).times do |j|
-              scores[j] = Kernels.dot(qp, kc.to_unsafe + j.to_i64 * kv_dim + kvh * hd, hd) * scale
-            end
-            Kernels.softmax(scores, pos + 1)
-            acc_out = attn.to_unsafe + t * q_dim + hh * hd
-            hd.times { |i| acc_out[i] = 0_f32 }
-            (pos + 1).times do |j|
-              w = scores[j]
-              vp = vc.to_unsafe + j.to_i64 * kv_dim + kvh * hd
-              hd.times { |i| acc_out[i] += w * vp[i] }
+        # Causal attention over the cache (positions 0..pos), heads in parallel.
+        Kernels.parallel_for(c.heads, n * (start_pos + n) >= 4096 ? 2 : Int32::MAX) do |h0, h1|
+          Kernels.scratch(start_pos + n) do |sp|
+            scores = Slice.new(sp, start_pos + n)
+            n.times do |t|
+              pos = start_pos + t
+              (h0...h1).each do |hh|
+                qp = q.to_unsafe + t * q_dim + hh * hd
+                kvh = hh // group
+                (pos + 1).times do |j|
+                  scores[j] = Kernels.dot(qp, kc.to_unsafe + j.to_i64 * kv_dim + kvh * hd, hd) * scale
+                end
+                Kernels.softmax(scores, pos + 1)
+                acc_out = attn.to_unsafe + t * q_dim + hh * hd
+                hd.times { |i| acc_out[i] = 0_f32 }
+                (pos + 1).times do |j|
+                  w = scores[j]
+                  vp = vc.to_unsafe + j.to_i64 * kv_dim + kvh * hd
+                  hd.times { |i| acc_out[i] += w * vp[i] }
+                end
+              end
             end
           end
         end
@@ -184,11 +193,47 @@ module AphroditeJax
         (n * d).times { |i| x[i] += o[i] }
       end
 
-      last = Slice(Float32).new(d)
+      last = buf.h[0, d]
       Kernels.rmsnorm(last, x[(n - 1) * d, d], @final_norm, c.eps)
-      logits = Slice(Float32).new(c.vocab)
-      Kernels.matmul(logits, last, @lm_head, 1, c.vocab, d)
-      logits
+      Kernels.matmul(@logits, last, @lm_head, 1, c.vocab, d)
+      @logits
+    end
+
+    # Activation buffers for `n` tokens, reused across calls and grown on
+    # demand (allocating them per call stalls Boehm GC on large blocks).
+    private def buffers(n : Int32) : Buffers
+      b = @buffers
+      return b if b && b.tokens >= n
+      @buffers = Buffers.new(@config, Math.max(n, b.try(&.tokens) || 0))
+    end
+
+    private class Buffers
+      getter tokens : Int32
+      getter x : Slice(Float32)
+      getter h : Slice(Float32)
+      getter q : Slice(Float32)
+      getter k : Slice(Float32)
+      getter v : Slice(Float32)
+      getter attn : Slice(Float32)
+      getter o : Slice(Float32)
+      getter gate : Slice(Float32)
+      getter up : Slice(Float32)
+      getter tmp : Slice(Float32)
+
+      def initialize(c : Qwen3Config, @tokens : Int32)
+        q_dim = c.heads * c.head_dim
+        kv_dim = c.kv_heads * c.head_dim
+        @x = Slice(Float32).new(@tokens * c.hidden)
+        @h = Slice(Float32).new(@tokens * c.hidden)
+        @q = Slice(Float32).new(@tokens * q_dim)
+        @k = Slice(Float32).new(@tokens * kv_dim)
+        @v = Slice(Float32).new(@tokens * kv_dim)
+        @attn = Slice(Float32).new(@tokens * q_dim)
+        @o = Slice(Float32).new(@tokens * c.hidden)
+        @gate = Slice(Float32).new(@tokens * c.intermediate)
+        @up = Slice(Float32).new(@tokens * c.intermediate)
+        @tmp = Slice(Float32).new(c.head_dim)
+      end
     end
 
     # Rotate-half RoPE: pairs (i, i + d/2). `src` is the normalised head;

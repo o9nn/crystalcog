@@ -3,6 +3,11 @@
 # protocol, plus the /api/auth/* routes and static files the React web app
 # uses. Accounts, bots and chats live in a Paphos backend; bot replies come
 # from a Pygmalion agent talking to an Aphrodite (OpenAI-compatible) engine.
+#
+# A chat message that starts with "/" is a crystalcog command (see
+# CrystalCog::CogChat.command): it runs against the server's AtomSpace and
+# its output is stored as the bot's reply. With tools_enabled, the model
+# can also call the crystalcog tools (CrystalCog::CogTools) while it replies.
 
 require "http/server"
 require "json"
@@ -11,6 +16,7 @@ require "./paphos_client"
 require "../pygmalion_agent"
 require "../../cogutil/logger"
 require "../../atomspace/atomspace"
+require "../../tools/cog_chat"
 
 module GalateaFrontend
   class Server
@@ -50,7 +56,12 @@ module GalateaFrontend
     property atomspace : AtomSpace::AtomSpace?
     property reply_attempts : Int32 = 3
     property paphos_url : String
+    # Engine for the /engine and /tokenize commands.
+    property engine : CrystalCog::CogChat::Engine?
+    # Let the model call crystalcog tools while replying.
+    property tools_enabled : Bool = false
     @server : HTTP::Server?
+    @cog_tools : CrystalCog::CogTools?
 
     def initialize(@paphos_url : String, @agent_factory : AgentFactory,
                    @host : String = "127.0.0.1", @requested_port : Int32 = 8080,
@@ -325,9 +336,37 @@ module GalateaFrontend
       history = client.messages(chat_id)
 
       client.post_message(chat_id, text)
-      reply = generate_reply(character, history, text)
+      reply = text.lstrip.starts_with?('/') ? run_command(text) : generate_reply(character, history, text)
       bot_message = client.post_message(chat_id, reply, "character", slug)
       {"message" => message_json(bot_message)}
+    end
+
+    # crystalcog tools over the server's AtomSpace.
+    def cog_tools : CrystalCog::CogTools
+      @cog_tools ||= begin
+        @atomspace ||= AtomSpace::AtomSpace.new
+        CrystalCog::CogTools.new(@atomspace.not_nil!)
+      end
+    end
+
+    private def run_command(text : String) : String
+      CrystalCog::CogChat.command(text, cog_tools, @engine)
+    rescue ex
+      "error: #{ex.message}"
+    end
+
+    private def tool_definitions : Array(PygmalionAgent::ToolDefinition)
+      cog_tools.tools.map do |tool|
+        params = PygmalionAgent::ToolParameters.new
+        tool.params.each do |p|
+          if p.type == "array"
+            params.add_array(p.name, p.description, "string", p.required)
+          else
+            params.add_property(p.name, PygmalionAgent::ParameterProperty.new(p.type, p.description), p.required)
+          end
+        end
+        PygmalionAgent::ToolDefinition.new(tool.name, tool.description, params)
+      end
     end
 
     private def generate_reply(character : JSON::Any, history : Array(JSON::Any), text : String) : String
@@ -350,9 +389,20 @@ module GalateaFrontend
       end
 
       base = agent.conversation_history.dup
+      tools = @tools_enabled ? tool_definitions : nil
       @reply_attempts.times do
         agent.conversation_history = base.dup
-        reply = agent.chat(text).strip
+        reply = if tools
+                  agent.chat_with_tools(text, tools) do |call|
+                    begin
+                      cog_tools.call(call.function_name, call.function_arguments)
+                    rescue ex
+                      "error: #{ex.message}"
+                    end
+                  end
+                else
+                  agent.chat(text)
+                end.strip
         return reply unless reply.empty?
       end
       raise ConnectError.new("unavailable", "the model returned an empty reply #{@reply_attempts} times")

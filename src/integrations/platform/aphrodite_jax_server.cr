@@ -114,15 +114,11 @@ module AphroditeJax
                                       "code" => status}}.to_json)
     end
 
-    private def text_of(content : JSON::Any?) : String
-      return "" unless content
-      content.as_s? || content.as_a?.try(&.compact_map { |p| p["text"]?.try(&.as_s?) }.join) || ""
-    end
-
     private def chat(ctx, body)
       messages = body["messages"]?.try(&.as_a?) || raise ArgumentError.new("messages is required")
-      convo = messages.map { |m| {m["role"]?.try(&.as_s?) || "user", text_of(m["content"]?)} }
-      prompt = @generator.chat_prompt(convo)
+      tools = body["tools"]?.try(&.as_a?).try { |t| t.empty? ? nil : t }
+      tools = nil if body["tool_choice"]?.try(&.as_s?) == "none"
+      prompt = @generator.chat_prompt(messages, tools)
       params = SamplingParams.from_json(body, @default_max_tokens)
       id = "chatcmpl-#{UUID.random.hexstring}"
       created = Time.utc.to_unix
@@ -130,24 +126,46 @@ module AphroditeJax
       if body["stream"]?.try(&.as_bool?)
         ctx.response.content_type = "text/event-stream"
         ctx.response.headers["Cache-Control"] = "no-cache"
-        send = ->(delta : Hash(String, String), finish : String?) do
+        send = ->(delta : Hash(String, JSON::Any), finish : String?) do
           chunk = {"id" => id, "object" => "chat.completion.chunk", "created" => created, "model" => @served_name,
                    "choices" => [{"index" => 0, "delta" => delta, "finish_reason" => finish}]}
           ctx.response.print "data: #{chunk.to_json}\n\n"
           ctx.response.flush
         end
-        send.call({"role" => "assistant"}, nil)
-        result = @generator.generate(prompt, params) { |piece| send.call({"content" => piece}, nil) }
-        send.call({} of String => String, result.finish_reason)
+        send.call({"role" => JSON::Any.new("assistant")}, nil)
+        if tools
+          # Tool calls are only known once the whole reply is in.
+          result = @generator.generate(prompt, params)
+          content, calls = ChatFormat.parse(result.text)
+          send.call({"content" => JSON::Any.new(content)}, nil) unless content.empty?
+          send.call({"tool_calls" => JSON.parse(tool_calls_json(calls).to_json)}, nil) unless calls.empty?
+          send.call({} of String => JSON::Any, calls.empty? ? result.finish_reason : "tool_calls")
+        else
+          result = @generator.generate(prompt, params) { |piece| send.call({"content" => JSON::Any.new(piece)}, nil) }
+          send.call({} of String => JSON::Any, result.finish_reason)
+        end
         ctx.response.print "data: [DONE]\n\n"
         return
       end
 
       result = @generator.generate(prompt, params)
+      content, calls = tools ? ChatFormat.parse(result.text) : {result.text, [] of ChatFormat::ToolCall}
+      message = if calls.empty?
+                  JSON.parse({"role" => "assistant", "content" => result.text}.to_json)
+                else
+                  JSON.parse({"role" => "assistant", "content" => content.presence, "tool_calls" => tool_calls_json(calls)}.to_json)
+                end
+      finish = calls.empty? ? result.finish_reason : "tool_calls"
       ctx.response.print({"id" => id, "object" => "chat.completion", "created" => created, "model" => @served_name,
-                          "choices" => [{"index" => 0, "finish_reason" => result.finish_reason, "logprobs" => nil,
-                                         "message" => {"role" => "assistant", "content" => result.text}}],
+                          "choices" => [{"index" => 0, "finish_reason" => finish, "logprobs" => nil, "message" => message}],
                           "usage" => usage(result)}.to_json)
+    end
+
+    private def tool_calls_json(calls : Array(ChatFormat::ToolCall))
+      calls.map_with_index do |call, i|
+        {"index" => i, "id" => "call_#{UUID.random.hexstring[0, 24]}", "type" => "function",
+         "function" => {"name" => call.name, "arguments" => call.arguments_json}}
+      end
     end
 
     private def completion(ctx, body)
