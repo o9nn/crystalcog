@@ -67,8 +67,8 @@ module AphroditeJax
 
     # Prompt for OpenAI-style messages, with function calling when `tools`
     # (OpenAI tool definitions) are given; see ChatFormat.
-    def chat_prompt(messages : Array(JSON::Any), tools : Array(JSON::Any)? = nil) : String
-      ChatFormat.prompt(messages, tools)
+    def chat_prompt(messages : Array(JSON::Any), tools : Array(JSON::Any)? = nil, thinking : Bool = false) : String
+      ChatFormat.prompt(messages, tools, thinking)
     end
 
     # Generate a completion. The block, if given, receives each new piece

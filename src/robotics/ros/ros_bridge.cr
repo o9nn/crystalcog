@@ -28,9 +28,9 @@ module Robotics
 
     # ROS communication protocol types
     enum Protocol
-      ROS1_XML_RPC  # ROS1 via rosbridge (websocket/TCP)
-      ROS2_DDS      # ROS2 via DDS (UDP multicast)
-      Rosbridge     # ROSBridge JSON protocol (works with both ROS1/ROS2)
+      ROS1_XML_RPC # ROS1 via rosbridge (websocket/TCP)
+      ROS2_DDS     # ROS2 via DDS (UDP multicast)
+      Rosbridge    # ROSBridge JSON protocol (works with both ROS1/ROS2)
     end
 
     # Connection state for ROS bridge
@@ -44,12 +44,12 @@ module Robotics
 
     # Quality of Service settings for ROS2
     struct QoSProfile
-      getter reliability : Symbol      # :reliable or :best_effort
-      getter durability : Symbol        # :volatile or :transient_local
-      getter history : Symbol           # :keep_last or :keep_all
-      getter depth : Int32              # History depth
-      getter deadline_ms : Int32        # Deadline in milliseconds (0 = infinite)
-      getter lifespan_ms : Int32        # Lifespan in milliseconds (0 = infinite)
+      getter reliability : Symbol # :reliable or :best_effort
+      getter durability : Symbol  # :volatile or :transient_local
+      getter history : Symbol     # :keep_last or :keep_all
+      getter depth : Int32        # History depth
+      getter deadline_ms : Int32  # Deadline in milliseconds (0 = infinite)
+      getter lifespan_ms : Int32  # Lifespan in milliseconds (0 = infinite)
 
       def initialize(
         @reliability : Symbol = :reliable,
@@ -162,11 +162,11 @@ module Robotics
       getter config : BridgeConfig
       getter state : ConnectionState
       getter stats : ConnectionStats
-      
+
       @socket : TCPSocket?
       @subscribers : Hash(String, Array(MessageCallback))
       @service_clients : Hash(String, ServiceCallback)
-      @advertised_topics : Hash(String, String)  # topic => message_type
+      @advertised_topics : Hash(String, String) # topic => message_type
       @pending_ops : Hash(String, Channel(JSON::Any?))
       @message_id : Int32
       @running : Bool
@@ -201,17 +201,17 @@ module Robotics
             @socket = TCPSocket.new(@config.host, @config.port)
             @socket.not_nil!.read_timeout = @config.message_timeout_ms.milliseconds
             @socket.not_nil!.write_timeout = @config.message_timeout_ms.milliseconds
-            
+
             @state = ConnectionState::Connected
             @stats.connected_since = Time.utc
             @running = true
-            
+
             # Start message reader fiber
             start_reader
-            
+
             # Advertise ourselves to rosbridge
             send_advertise_node
-            
+
             CogUtil::Logger.info("Successfully connected to ROS")
             return true
           rescue ex
@@ -232,13 +232,13 @@ module Robotics
         return if @state == ConnectionState::Disconnected
 
         @running = false
-        
+
         # Unadvertise all topics
         @advertised_topics.each_key do |topic|
           send_unadvertise(topic)
         end
         @advertised_topics.clear
-        
+
         # Unsubscribe from all topics
         @subscribers.each_key do |topic|
           send_unsubscribe(topic)
@@ -259,16 +259,16 @@ module Robotics
       # Advertise a topic for publishing
       def advertise(topic : String, msg_type : String, qos : QoSProfile = QoSProfile.default) : Bool
         return false unless connected?
-        
+
         full_topic = namespaced_topic(topic)
         return true if @advertised_topics.has_key?(full_topic)
 
         msg = {
-          "op" => "advertise",
+          "op"    => "advertise",
           "topic" => full_topic,
-          "type" => msg_type
+          "type"  => msg_type,
         }
-        
+
         if send_json(msg)
           @advertised_topics[full_topic] = msg_type
           CogUtil::Logger.debug("Advertised topic: #{full_topic} [#{msg_type}]")
@@ -296,16 +296,16 @@ module Robotics
         return false unless connected?
 
         full_topic = namespaced_topic(topic)
-        
+
         # Auto-advertise if needed
         unless @advertised_topics.has_key?(full_topic)
           CogUtil::Logger.warn("Publishing to unadvertised topic: #{full_topic}")
         end
 
         msg = {
-          "op" => "publish",
+          "op"    => "publish",
           "topic" => full_topic,
-          "msg" => message
+          "msg"   => message,
         }
 
         if send_json(msg)
@@ -317,13 +317,13 @@ module Robotics
       end
 
       # Subscribe to a topic
-      def subscribe(topic : String, msg_type : String? = nil, 
-                    qos : QoSProfile = QoSProfile.default, 
+      def subscribe(topic : String, msg_type : String? = nil,
+                    qos : QoSProfile = QoSProfile.default,
                     &callback : MessageCallback) : Bool
         return false unless connected?
 
         full_topic = namespaced_topic(topic)
-        
+
         @mutex.synchronize do
           @subscribers[full_topic] ||= [] of MessageCallback
           @subscribers[full_topic] << callback
@@ -332,8 +332,8 @@ module Robotics
         # Only send subscribe if this is the first subscriber
         if @subscribers[full_topic].size == 1
           msg = {
-            "op" => "subscribe",
-            "topic" => full_topic
+            "op"    => "subscribe",
+            "topic" => full_topic,
           }
           msg = msg.merge({"type" => msg_type}) if msg_type
 
@@ -341,7 +341,7 @@ module Robotics
             @subscribers.delete(full_topic)
             return false
           end
-          
+
           CogUtil::Logger.debug("Subscribed to topic: #{full_topic}")
         end
 
@@ -351,33 +351,33 @@ module Robotics
       # Unsubscribe from a topic
       def unsubscribe(topic : String) : Bool
         full_topic = namespaced_topic(topic)
-        
+
         @mutex.synchronize do
           @subscribers.delete(full_topic)
         end
-        
+
         send_unsubscribe(full_topic)
       end
 
       # Call a ROS service (synchronous)
-      def call_service(service : String, args : Hash(String, JSON::Any::Type)? = nil, 
+      def call_service(service : String, args : Hash(String, JSON::Any::Type)? = nil,
                        timeout_ms : Int32? = nil) : JSON::Any?
         return nil unless connected?
 
         timeout = (timeout_ms || @config.message_timeout_ms).milliseconds
         full_service = namespaced_topic(service)
-        
+
         op_id = next_message_id
         response_channel = Channel(JSON::Any?).new(1)
-        
+
         @mutex.synchronize do
           @pending_ops[op_id] = response_channel
         end
 
         msg = {
-          "op" => "call_service",
+          "op"      => "call_service",
           "service" => full_service,
-          "id" => op_id
+          "id"      => op_id,
         }
         msg = msg.merge({"args" => args}) if args
 
@@ -419,7 +419,7 @@ module Robotics
 
         topics = response["topics"]?.try(&.as_a?)
         types = response["types"]?.try(&.as_a?)
-        
+
         return nil unless topics && types
 
         result = [] of NamedTuple(name: String, type: String)
@@ -462,8 +462,8 @@ module Robotics
         return false unless connected?
 
         response = call_service("/rosapi/set_param", {
-          "name" => name,
-          "value" => JSON.parse(value.to_json).raw
+          "name"  => name,
+          "value" => JSON.parse(value.to_json).raw,
         })
         response != nil
       end
@@ -480,7 +480,7 @@ module Robotics
 
       private def send_json(data) : Bool
         return false unless socket = @socket
-        
+
         json_str = data.to_json + "\n"
         begin
           socket.write(json_str.to_slice)
@@ -499,24 +499,24 @@ module Robotics
         # Rosbridge doesn't require explicit node advertisement,
         # but we can set up the namespace
         msg = {
-          "op" => "set_level",
-          "level" => "warning"  # Reduce rosbridge logging
+          "op"    => "set_level",
+          "level" => "warning", # Reduce rosbridge logging
         }
         send_json(msg)
       end
 
       private def send_unadvertise(topic : String) : Bool
         msg = {
-          "op" => "unadvertise",
-          "topic" => topic
+          "op"    => "unadvertise",
+          "topic" => topic,
         }
         send_json(msg)
       end
 
       private def send_unsubscribe(topic : String) : Bool
         msg = {
-          "op" => "unsubscribe",
-          "topic" => topic
+          "op"    => "unsubscribe",
+          "topic" => topic,
         }
         send_json(msg)
       end
@@ -524,13 +524,13 @@ module Robotics
       private def start_reader
         @reader_fiber = spawn do
           buffer = String::Builder.new
-          
+
           while @running && (socket = @socket)
             begin
               # Read data from socket
               bytes = Bytes.new(4096)
               read_count = socket.read(bytes)
-              
+
               if read_count == 0
                 # Connection closed
                 handle_disconnection
@@ -549,7 +549,6 @@ module Robotics
 
                 process_message(json_str) unless json_str.empty?
               end
-
             rescue IO::TimeoutError
               # Read timeout, continue loop
             rescue ex
@@ -566,7 +565,7 @@ module Robotics
         begin
           data = JSON.parse(json_str)
           op = data["op"]?.try(&.as_s?)
-          
+
           case op
           when "publish"
             # Incoming message on subscribed topic
@@ -577,7 +576,6 @@ module Robotics
               @stats.last_message_time = Time.utc
               dispatch_message(topic, msg)
             end
-            
           when "service_response"
             # Response to a service call
             id = data["id"]?.try(&.as_s)
@@ -585,17 +583,14 @@ module Robotics
             if id && (channel = @pending_ops[id]?)
               channel.send(values)
             end
-            
           when "status"
             # Status message from rosbridge
             level = data["level"]?.try(&.as_s)
             message = data["msg"]?.try(&.as_s)
             CogUtil::Logger.debug("ROS status [#{level}]: #{message}")
-            
           else
             CogUtil::Logger.debug("Unknown ROS message op: #{op}")
           end
-          
         rescue ex
           CogUtil::Logger.error("Failed to parse ROS message: #{ex.message}")
           @stats.errors += 1
@@ -619,14 +614,14 @@ module Robotics
 
       private def handle_disconnection
         return if @state == ConnectionState::Disconnected
-        
+
         @state = ConnectionState::Reconnecting
         @socket.try(&.close)
         @socket = nil
         @stats.reconnections += 1
-        
+
         CogUtil::Logger.warn("ROS connection lost, attempting reconnection...")
-        
+
         spawn do
           sleep(@config.reconnect_delay_ms.milliseconds)
           connect if @running

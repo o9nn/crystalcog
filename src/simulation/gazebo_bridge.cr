@@ -234,7 +234,7 @@ module Simulation
       return false unless bridge
 
       wrench = {
-        "body_name"      => name,
+        "body_name"       => name,
         "reference_frame" => "world",
         "wrench"          => {
           "force"  => {"x" => force.x, "y" => force.y, "z" => force.z},

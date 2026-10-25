@@ -118,7 +118,9 @@ module AphroditeJax
       messages = body["messages"]?.try(&.as_a?) || raise ArgumentError.new("messages is required")
       tools = body["tools"]?.try(&.as_a?).try { |t| t.empty? ? nil : t }
       tools = nil if body["tool_choice"]?.try(&.as_s?) == "none"
-      prompt = @generator.chat_prompt(messages, tools)
+      names = tools.try(&.compact_map { |t| (t["function"]? || t)["name"]?.try(&.as_s?) })
+      thinking = body["chat_template_kwargs"]?.try(&.["enable_thinking"]?).try(&.as_bool?) || false
+      prompt = @generator.chat_prompt(messages, tools, thinking)
       params = SamplingParams.from_json(body, @default_max_tokens)
       id = "chatcmpl-#{UUID.random.hexstring}"
       created = Time.utc.to_unix
@@ -133,10 +135,11 @@ module AphroditeJax
           ctx.response.flush
         end
         send.call({"role" => JSON::Any.new("assistant")}, nil)
-        if tools
-          # Tool calls are only known once the whole reply is in.
+        if tools || thinking
+          # Tool calls, and the end of the reasoning block, are only known
+          # once the whole reply is in.
           result = @generator.generate(prompt, params)
-          content, calls = ChatFormat.parse(result.text)
+          content, calls = tools ? ChatFormat.parse(result.text, names) : {ChatFormat.strip_reasoning(result.text), [] of ChatFormat::ToolCall}
           send.call({"content" => JSON::Any.new(content)}, nil) unless content.empty?
           send.call({"tool_calls" => JSON.parse(tool_calls_json(calls).to_json)}, nil) unless calls.empty?
           send.call({} of String => JSON::Any, calls.empty? ? result.finish_reason : "tool_calls")
@@ -149,9 +152,9 @@ module AphroditeJax
       end
 
       result = @generator.generate(prompt, params)
-      content, calls = tools ? ChatFormat.parse(result.text) : {result.text, [] of ChatFormat::ToolCall}
+      content, calls = tools ? ChatFormat.parse(result.text, names) : {ChatFormat.strip_reasoning(result.text), [] of ChatFormat::ToolCall}
       message = if calls.empty?
-                  JSON.parse({"role" => "assistant", "content" => result.text}.to_json)
+                  JSON.parse({"role" => "assistant", "content" => content}.to_json)
                 else
                   JSON.parse({"role" => "assistant", "content" => content.presence, "tool_calls" => tool_calls_json(calls)}.to_json)
                 end

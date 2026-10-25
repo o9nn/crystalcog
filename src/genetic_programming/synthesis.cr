@@ -333,13 +333,11 @@ module GeneticProgramming
 
           new_population << child1 if new_population.size < @config.population_size
           new_population << child2 if new_population.size < @config.population_size
-
         elsif op < @config.crossover_rate + @config.mutation_rate
           # Mutation
           parent = selection.tournament_select(@population)
           child = mutation.mutate(parent)
           new_population << child
-
         else
           # Reproduction (copy)
           parent = selection.tournament_select(@population)

@@ -9,8 +9,8 @@ module Simulation
     property current_time : Float64 = 0.0
     property time_scale : Float64 = 1.0
     property paused : Bool = false
-    property fixed_timestep : Float64 = 0.02  # 50 Hz default
-    property max_delta_time : Float64 = 0.1   # Clamp large deltas
+    property fixed_timestep : Float64 = 0.02 # 50 Hz default
+    property max_delta_time : Float64 = 0.1  # Clamp large deltas
 
     getter total_steps : Int64 = 0_i64
     getter real_start_time : Time?

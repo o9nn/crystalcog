@@ -44,6 +44,7 @@ Engine options are the same for every command that uses a model:
 - `--model DIR|REPO_ID` loads the model in-process: a Hugging Face snapshot directory, or a repo id already in the HF cache. `CRYSTALCOG_MODEL` or `APHRODITE_MODEL` work too.
 - `--url URL` uses a running OpenAI-compatible server instead. `APHRODITE_URL` works too.
 - Sampling options: `--max-tokens`, `--temperature`, `--top-p`, `--top-k`, `--seed`.
+- `--think` turns on Qwen3's reasoning mode. The reasoning is not shown, and tool use gets more reliable.
 
 ```bash
 crystalcog chat --model Qwen/Qwen3-0.6B                 # interactive; Ctrl-D or /quit to leave
@@ -76,6 +77,12 @@ Messages that start with `/` are commands. The model never sees them:
 | `/tools on\|off`, `/system TEXT`, `/reset` | Session settings (`crystalcog chat` only) |
 
 Any other message goes to the model together with the tool schemas. When the model calls a tool, the session runs it against the AtomSpace, returns the result as a `tool` message, and asks the model again. It repeats this up to `max_tool_rounds` (4) times, then the model must answer in text.
+
+Small models choose tools unreliably in Qwen3's fast (non-thinking) mode. On Qwen3-0.6B:
+- "Store this fact in the knowledge base: a cat is a mammal." and "A mammal is an animal." produced `add_inheritance` calls.
+- "Remember that a cat is a mammal." got a prose answer.
+- With `--think` (Qwen3 reasoning, `chat_template_kwargs.enable_thinking` on the server), the model reasoned about the tools and then called `add_inheritance` for that phrasing as well. It costs a couple of hundred extra tokens per turn.
+- The model sometimes writes a call as `<query_atoms name="cat"/>` instead of a `<tool_call>` block. That form is accepted for known tool names.
 
 The Galatea server (`crystalcog platform`) works the same way:
 - `/commands` sent with `ChatSendMessage` run against the platform's AtomSpace. Their output is stored as the bot's reply.

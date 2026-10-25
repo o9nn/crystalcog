@@ -73,7 +73,7 @@ module Simulation
 
   # Rotation actuator - allows agent to rotate
   class RotationActuator < Actuator
-    property turn_rate : Float64 = Math::PI  # Radians per second
+    property turn_rate : Float64 = Math::PI # Radians per second
 
     def initialize(name : String = "rotation", @turn_rate : Float64 = Math::PI)
       super(name)
@@ -87,7 +87,7 @@ module Simulation
       agent = @agent
       return false unless agent
 
-      angle = params["angle"]? || @turn_rate * 0.1  # Default small turn
+      angle = params["angle"]? || @turn_rate * 0.1 # Default small turn
 
       case action
       when "turn_left"
@@ -157,7 +157,6 @@ module Simulation
         else
           false
         end
-
       when "release"
         if obj = @held_object
           CogUtil::Logger.debug("Agent '#{agent.name}' released object '#{obj.name}'")
@@ -166,7 +165,6 @@ module Simulation
         else
           false
         end
-
       when "hold"
         # Keep held object at agent's position
         if obj = @held_object
@@ -176,7 +174,6 @@ module Simulation
         else
           false
         end
-
       else
         false
       end
@@ -243,7 +240,6 @@ module Simulation
         CogUtil::Logger.debug("Agent '#{agent.name}' broadcast to #{count} agents")
         @pending_message = nil
         true
-
       when "send"
         # Send to specific target
         target_name = @target
@@ -264,12 +260,10 @@ module Simulation
         @pending_message = nil
         @target = nil
         true
-
       when "signal"
         # Simple signal (no message content)
         # Could trigger listeners
         true
-
       else
         false
       end
@@ -283,7 +277,7 @@ module Simulation
 
   # LED/Light actuator - visual indicator
   class LightActuator < Actuator
-    property color : {Float64, Float64, Float64} = {1.0, 1.0, 1.0}  # RGB
+    property color : {Float64, Float64, Float64} = {1.0, 1.0, 1.0} # RGB
     property intensity : Float64 = 1.0
     property is_on : Bool = false
 

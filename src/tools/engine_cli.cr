@@ -12,7 +12,7 @@
 # engine:   --model DIR|REPO_ID  (load in-process; or CRYSTALCOG_MODEL / APHRODITE_MODEL)
 #           --url URL            (use a running OpenAI-compatible server; or APHRODITE_URL)
 #           --max-model-len N
-# sampling: --max-tokens N --temperature T --top-p P --top-k K --seed S
+# sampling: --max-tokens N --temperature T --top-p P --top-k K --seed S --think
 
 require "option_parser"
 require "./cog_chat"
@@ -32,6 +32,7 @@ module CrystalCog
       property atomspace_file : String? = nil
       property messages = [] of String
       property chat = false
+      property think = false
       property json = false
       property rest = [] of String
     end
@@ -75,6 +76,7 @@ module CrystalCog
           p.on("--top-p P", "Nucleus sampling (default 0.95)") { |v| opts.params.top_p = v.to_f }
           p.on("--top-k K", "Top-k sampling (default 20)") { |v| opts.params.top_k = v.to_i }
           p.on("--seed S", "Random seed") { |v| opts.params.seed = v.to_i64 }
+          p.on("--think", "Let Qwen3 reason (<think>) before answering; the reasoning is not shown") { opts.think = true }
         end
         if command == "chat"
           p.on("--no-tools", "Do not let the model call crystalcog tools") { opts.tools = false }
@@ -96,13 +98,15 @@ module CrystalCog
     end
 
     def self.engine_for(opts : Options) : CogChat::Engine
-      if url = opts.url
-        CogChat::RemoteEngine.new(url)
-      elsif model = opts.model
-        CogChat::LocalEngine.load(model, opts.max_len)
-      else
-        raise ArgumentError.new("no engine: pass --model DIR|REPO_ID (or set CRYSTALCOG_MODEL) or --url URL (or APHRODITE_URL)")
-      end
+      engine = if url = opts.url
+                 CogChat::RemoteEngine.new(url)
+               elsif model = opts.model
+                 CogChat::LocalEngine.load(model, opts.max_len)
+               else
+                 raise ArgumentError.new("no engine: pass --model DIR|REPO_ID (or set CRYSTALCOG_MODEL) or --url URL (or APHRODITE_URL)")
+               end
+      engine.thinking = opts.think
+      engine
     end
 
     # Run the block with tools over an AtomSpace that is loaded from, and
@@ -161,8 +165,12 @@ module CrystalCog
       case engine
       when CogChat::LocalEngine
         gen = engine.generator
-        text = opts.chat ? gen.chat_prompt([{"user", prompt}]) : prompt
-        gen.generate(text, opts.params) { |piece| output.print piece; output.flush }
+        if opts.chat
+          msgs = [JSON::Any.new({"role" => JSON::Any.new("user"), "content" => JSON::Any.new(prompt)})]
+          engine.chat(msgs, nil, opts.params) { |piece| output.print piece; output.flush }
+        else
+          gen.generate(prompt, opts.params) { |piece| output.print piece; output.flush }
+        end
       else
         messages = [JSON::Any.new({"role" => JSON::Any.new("user"), "content" => JSON::Any.new(prompt)})]
         engine.chat(messages, nil, opts.params) { |piece| output.print piece; output.flush }

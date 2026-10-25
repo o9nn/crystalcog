@@ -258,3 +258,43 @@ describe CrystalCog::EngineCLI do
     end
   end
 end
+
+describe "Qwen3 thinking mode and lenient tool calls" do
+  it "opens the assistant turn for reasoning and strips it from replies" do
+    msgs = [JSON.parse(%({"role": "user", "content": "hi"})),
+            JSON.parse(%({"role": "assistant", "content": "<think>\\nhmm\\n</think>\\n\\nhello"})),
+            JSON.parse(%({"role": "user", "content": "again"}))]
+    AphroditeJax::ChatFormat.prompt(msgs, thinking: true).should eq(
+      "<|im_start|>user\nhi<|im_end|>\n<|im_start|>assistant\nhello<|im_end|>\n<|im_start|>user\nagain<|im_end|>\n<|im_start|>assistant\n")
+    AphroditeJax::ChatFormat.strip_reasoning("<think>\nplan\n</think>\n\nAnswer").should eq("Answer")
+    content, calls = AphroditeJax::ChatFormat.parse(%(<think>x</think>\n<tool_call>{"name": "a", "arguments": {}}</tool_call>))
+    {content, calls.map(&.name)}.should eq({"", ["a"]})
+  end
+
+  it "accepts XML-style calls only for known tool names" do
+    content, calls = AphroditeJax::ChatFormat.parse(%(Let me check. <query_atoms name="cat"/>), ["query_atoms"])
+    content.should eq("Let me check.")
+    calls.map { |c| {c.name, c.arguments_json} }.should eq([{"query_atoms", %({"name":"cat"})}])
+    AphroditeJax::ChatFormat.parse(%(<b>bold</b>), ["query_atoms"])[1].should be_empty
+    AphroditeJax::ChatFormat.parse(%(<query_atoms name="cat"/>))[1].should be_empty
+  end
+
+  it "sends enable_thinking to remote engines" do
+    received = [] of JSON::Any
+    server = HTTP::Server.new do |ctx|
+      received << JSON.parse(ctx.request.body.not_nil!.gets_to_end)
+      ctx.response.print({"choices" => [{"finish_reason" => "stop", "message" => {"role" => "assistant", "content" => "ok"}}]}.to_json)
+    end
+    address = server.bind_tcp("127.0.0.1", 0)
+    spawn { server.listen }
+    Fiber.yield
+    begin
+      engine = CogChat::RemoteEngine.new("http://127.0.0.1:#{address.port}", "m")
+      engine.thinking = true
+      engine.chat([JSON.parse(%({"role": "user", "content": "hi"}))], nil, CogChat::SamplingParams.new) { }.content.should eq("ok")
+      received[0]["chat_template_kwargs"]["enable_thinking"].should eq(true)
+    ensure
+      server.close
+    end
+  end
+end

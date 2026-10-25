@@ -33,9 +33,10 @@ module AphroditeJax
       content.as_s? || content.as_a?.try(&.compact_map { |p| p["text"]?.try(&.as_s?) }.join) || ""
     end
 
-    # The prompt for `messages`, ending with an open assistant turn. Qwen3's
-    # reasoning mode is turned off with an empty think block.
-    def self.prompt(messages : Array(JSON::Any), tools : Array(JSON::Any)? = nil) : String
+    # The prompt for `messages`, ending with an open assistant turn. Unless
+    # `thinking`, Qwen3's reasoning mode is turned off with an empty think
+    # block.
+    def self.prompt(messages : Array(JSON::Any), tools : Array(JSON::Any)? = nil, thinking : Bool = false) : String
       String.build do |io|
         rest = messages
         if tools && !tools.empty?
@@ -62,11 +63,13 @@ module AphroditeJax
             io << "<|im_end|>\n"
             in_responses = false
           end
-          io << "<|im_start|>" << role << '\n' << text_of(m["content"]?)
+          content = text_of(m["content"]?)
+          content = strip_reasoning(content) if role == "assistant"
+          io << "<|im_start|>" << role << '\n' << content
           if role == "assistant" && (calls = m["tool_calls"]?.try(&.as_a?))
             calls.each_with_index do |call, i|
               fn = call["function"]? || call
-              io << '\n' if i > 0 || !text_of(m["content"]?).empty?
+              io << '\n' if i > 0 || !content.empty?
               io << TOOL_CALL_OPEN << "\n{\"name\": \"" << fn["name"]?.try(&.as_s?) << "\", \"arguments\": " << dumps(arguments(fn["arguments"]?)) << '}'
               io << '\n' << TOOL_CALL_CLOSE
             end
@@ -74,13 +77,29 @@ module AphroditeJax
           io << "<|im_end|>\n"
         end
         io << "<|im_end|>\n" if in_responses
-        io << "<|im_start|>assistant\n<think>\n\n</think>\n\n"
+        io << (thinking ? "<|im_start|>assistant\n" : "<|im_start|>assistant\n<think>\n\n</think>\n\n")
+      end
+    end
+
+    # The text after Qwen3's <think>...</think> reasoning block, if any.
+    def self.strip_reasoning(text : String) : String
+      if close = text.index("</think>")
+        text[close + "</think>".size..].lstrip
+      else
+        text
       end
     end
 
     # Split generated text into its plain content and the tool calls it
     # makes. A block that is not valid JSON with a "name" stays in the text.
-    def self.parse(text : String) : {String, Array(ToolCall)}
+    # Small models sometimes write a call as an XML element instead
+    # (<query_atoms name="cat"/>); given the tool names, those count too.
+    def self.parse(text : String, tool_names : Enumerable(String)? = nil) : {String, Array(ToolCall)}
+      text = strip_reasoning(text)
+      if tool_names && !text.includes?(TOOL_CALL_OPEN)
+        xml = xml_calls(text, tool_names)
+        return xml unless xml[1].empty?
+      end
       calls = [] of ToolCall
       content = String.build do |io|
         pos = 0
@@ -106,6 +125,20 @@ module AphroditeJax
       ToolCall.new(name, arguments(json["arguments"]? || json["parameters"]?))
     rescue JSON::ParseException
       nil
+    end
+
+    XML_CALL = /<([A-Za-z_][\w.-]*)((?:\s+[\w-]+\s*=\s*"[^"]*")*)\s*\/?>(?:\s*<\/\1>)?/
+
+    private def self.xml_calls(text : String, tool_names : Enumerable(String)) : {String, Array(ToolCall)}
+      calls = [] of ToolCall
+      content = text.scrub.gsub(XML_CALL) do |whole, m|
+        next whole unless tool_names.includes?(m[1])
+        args = {} of String => JSON::Any
+        m[2].scan(/([\w-]+)\s*=\s*"([^"]*)"/) { |a| args[a[1]] = JSON::Any.new(a[2]) }
+        calls << ToolCall.new(m[1], JSON::Any.new(args))
+        ""
+      end
+      {content.strip, calls}
     end
 
     # JSON the way the template's `tojson` writes it (Python's json.dumps:

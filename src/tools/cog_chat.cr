@@ -27,6 +27,10 @@ module CrystalCog
     record Reply, content : String, tool_calls : Array(ToolCall), finish_reason : String
 
     abstract class Engine
+      # Qwen3 reasoning mode: the model thinks in <think>...</think> before
+      # answering; the reasoning is not part of the reply.
+      property thinking : Bool = false
+
       abstract def chat(messages : Array(JSON::Any), tools : Array(JSON::Any)?, params : SamplingParams,
                         &on_text : String ->) : Reply
       abstract def tokenize(text : String) : Array(Int32)
@@ -47,26 +51,43 @@ module CrystalCog
 
       def chat(messages : Array(JSON::Any), tools : Array(JSON::Any)?, params : SamplingParams,
                &on_text : String ->) : Reply
-        prompt = @generator.chat_prompt(messages, tools)
-        return plain(prompt, params, on_text) unless tools
+        prompt = @generator.chat_prompt(messages, tools, @thinking)
+        return plain(prompt, params, on_text) unless tools || @thinking
 
-        # Stream the text before any <tool_call>, holding back a tail that
-        # could still turn into one.
+        # Stream the answer: skip a reasoning block, and stop at the first
+        # <tool_call>, holding back a tail that could still start one.
         text = ""
         emitted = 0
+        start = @thinking ? nil : 0
         result = @generator.generate(prompt, params) do |piece|
           text += piece
-          cut = text.index(AphroditeJax::ChatFormat::TOOL_CALL_OPEN) || safe_length(text)
-          if cut > emitted
-            on_text.call(text[emitted...cut])
-            emitted = cut
+          if start.nil? && (close = text.index("</think>"))
+            first = close + "</think>".size
+            while first < text.size && text[first].whitespace?
+              first += 1
+            end
+            start = emitted = first
+          end
+          if s = start
+            cut = text.index(AphroditeJax::ChatFormat::TOOL_CALL_OPEN, s) || safe_length(text)
+            if cut > emitted
+              on_text.call(text[emitted...cut])
+              emitted = cut
+            end
           end
         end
-        content, calls = AphroditeJax::ChatFormat.parse(result.text)
-        if calls.empty? && result.text.size > emitted
-          on_text.call(result.text[emitted..])
+        names = tools.try(&.compact_map { |t| t["function"]?.try(&.["name"]?).try(&.as_s?) })
+        content, calls = AphroditeJax::ChatFormat.parse(result.text, names)
+        if calls.empty?
+          answer = AphroditeJax::ChatFormat.strip_reasoning(result.text)
+          if start.nil?
+            on_text.call(answer) unless answer.empty? # reasoning never closed
+          elsif result.text.size > emitted
+            on_text.call(result.text[emitted..])
+          end
+          return Reply.new(answer.strip, calls, result.finish_reason)
         end
-        Reply.new(calls.empty? ? result.text.strip : content, calls, calls.empty? ? result.finish_reason : "tool_calls")
+        Reply.new(content, calls, "tool_calls")
       end
 
       private def plain(prompt, params, on_text) : Reply
@@ -117,6 +138,7 @@ module CrystalCog
         params.seed.try { |s| body["seed"] = JSON::Any.new(s) }
         body["stop"] = JSON::Any.new(params.stop.map { |s| JSON::Any.new(s) }) unless params.stop.empty?
         body["tools"] = JSON::Any.new(tools) if tools
+        body["chat_template_kwargs"] = JSON::Any.new({"enable_thinking" => JSON::Any.new(@thinking)})
         json = post("/v1/chat/completions", body.to_json)
         choice = json["choices"][0]
         message = choice["message"]
@@ -173,9 +195,12 @@ module CrystalCog
       end
     end
 
-    DEFAULT_SYSTEM = "You are CogChat, an assistant connected to the CrystalCog knowledge base (an AtomSpace " \
-                     "with PLN reasoning). Use the tools to store facts the user states, to look things up, and " \
-                     "to reason. After using tools, answer briefly in plain language."
+    DEFAULT_SYSTEM = "You are CogChat. The CrystalCog knowledge base (an AtomSpace with PLN reasoning) is your only " \
+                     "memory, and you reach it only through the tools.\n" \
+                     "- When the user states a fact such as \"X is a Y\", call add_inheritance to store it.\n" \
+                     "- When the user asks what is known about something, call query_atoms or list_atoms before answering.\n" \
+                     "- When the user asks whether something follows, call pln_reason and then list_atoms.\n" \
+                     "Never claim to have stored or found something without calling a tool. After the tool results, answer briefly."
 
     HELP = <<-TEXT
     Commands (never sent to the model):
