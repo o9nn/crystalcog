@@ -28,7 +28,8 @@ module AphroditeJax
     if Dir.exists?(repo_dir)
       ref = File.join(repo_dir, "refs", "main")
       snapshot = File.exists?(ref) ? File.join(repo_dir, "snapshots", File.read(ref).strip) : nil
-      snapshot ||= Dir.glob(File.join(repo_dir, "snapshots", "*")).sort.last?
+      snapshots = File.join(repo_dir, "snapshots")
+      snapshot ||= Dir.exists?(snapshots) ? Dir.children(snapshots).sort.last?.try { |s| File.join(snapshots, s) } : nil
       return snapshot if snapshot && File.exists?(File.join(snapshot, "config.json"))
     end
     raise ArgumentError.new("model #{model.inspect} is neither a directory nor in the Hugging Face cache (#{hub}); " \

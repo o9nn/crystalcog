@@ -87,7 +87,9 @@ module AphroditeJax
     @files : Array(Safetensors)
 
     def initialize(dir : String)
-      paths = Dir.glob(File.join(dir, "*.safetensors")).sort
+      # Dir.children rather than Dir.glob: glob patterns break on Windows
+      # backslash paths.
+      paths = Dir.children(dir).select(&.ends_with?(".safetensors")).sort.map { |f| File.join(dir, f) }
       raise ArgumentError.new("no .safetensors files in #{dir}") if paths.empty?
       @files = paths.map { |p| Safetensors.new(p) }
     end
