@@ -7,7 +7,9 @@
 #
 # Environment: PAPHOS_PORT (3000), PAPHOS_DATA_FILE, GALATEA_PORT (8080),
 # GALATEA_STATIC_DIR, PLATFORM_HOST (127.0.0.1), PLATFORM_MAX_TOKENS (160),
-# plus the APHRODITE_* variables read by AphroditeEngine::Config.from_env.
+# PLATFORM_TOOLS (1/0: let the model call crystalcog tools; on by default
+# for the native aphrodite_jax backend), plus the APHRODITE_* variables read
+# by AphroditeEngine::Config.from_env.
 
 require "./aphrodite_engine"
 require "./paphos_server"
@@ -40,6 +42,12 @@ module PygmalionPlatform
       @galatea = GalateaFrontend::Server.new(@paphos.url_for(host, paphos_port), factory, host, galatea_port,
         static_dir: static_dir)
       @galatea.atomspace = @atomspace
+      @galatea.engine = CrystalCog::CogChat::RemoteEngine.new(engine_config.url)
+      @galatea.tools_enabled = case ENV["PLATFORM_TOOLS"]?
+                               when "1", "true"  then true
+                               when "0", "false" then false
+                               else                   engine_config.backend.aphrodite_jax?
+                               end
     end
 
     # Start the engine (waiting until it serves), then Paphos, then Galatea.
@@ -60,7 +68,8 @@ module PygmalionPlatform
     def status : Hash(String, String)
       {"engine" => @engine.config.url, "engine_backend" => @engine.config.backend.to_s,
        "engine_models" => @engine.models.join(", "), "paphos" => @paphos.url,
-       "galatea" => @galatea.url, "atoms" => @atomspace.size.to_s}
+       "galatea" => @galatea.url, "atoms" => @atomspace.size.to_s,
+       "model_tools" => @galatea.tools_enabled ? "on" : "off"}
     end
   end
 end

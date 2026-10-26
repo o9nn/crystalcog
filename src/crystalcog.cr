@@ -16,6 +16,7 @@ require "./learning/learning_main"
 require "./tools/cogshell"
 require "./integrations/integration"
 require "./integrations/platform/stack"
+require "./tools/engine_cli"
 
 # Conditionally require server components
 {% if flag?(:with_cogserver) %}
@@ -54,6 +55,11 @@ module CrystalCog
   end
 
   def self.main(args = ARGV)
+    # Engine and tool commands print only their own output, so it can be piped.
+    if EngineCLI.command?(args.first?)
+      exit EngineCLI.run(args.first, args[1..])
+    end
+
     puts "CrystalCog #{VERSION} - OpenCog in Crystal"
     puts "Args received: #{args}"
 
@@ -84,7 +90,8 @@ module CrystalCog
     when "platform"
       run_pygmalion_platform
     else
-      puts "Usage: crystalcog [server|shell|test|integration|platform|attention|nlp|language-capabilities|moses]"
+      puts "Usage: crystalcog [server|shell|test|integration|platform|attention|nlp|language-capabilities|moses|"
+      puts "                   chat|generate|tokenize|detokenize|cog|tool|tools|engine]"
       puts "  server                  - Start the CogServer"
       puts "  shell                   - Start interactive shell"
       puts "  test                    - Run basic test operations"
@@ -94,6 +101,14 @@ module CrystalCog
       puts "  nlp                     - Demo natural language processing"
       puts "  language-capabilities   - Demo language processing with reasoning"
       puts "  moses                   - Run MOSES evolutionary program learning"
+      puts "  chat                    - Chat with the native Crystal engine; the model can call crystalcog tools,"
+      puts "                            and /commands run AtomSpace, PLN, URE and NLP directly"
+      puts "  generate                - Generate text with the native Crystal engine"
+      puts "  tokenize / detokenize   - Convert between text and token ids"
+      puts "  cog                     - Run one CogShell command (--atomspace FILE keeps state between runs)"
+      puts "  tool / tools            - Call a crystalcog tool with JSON arguments / list the tools"
+      puts "  engine serve            - Serve the native engine over the OpenAI-compatible API"
+      puts "  (run any of the last six with --help for options)"
     end
   end
 

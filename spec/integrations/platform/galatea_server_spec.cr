@@ -5,10 +5,13 @@ require "../../../src/integrations/platform/paphos_server"
 require "../../../src/integrations/platform/galatea_server"
 
 # Minimal OpenAI-compatible engine: replies with the persona it was given
-# and the last user message, so specs can see both reached the model.
+# and the last user message, so specs can see both reached the model. With
+# tool_call set, a request that offers tools gets that call back, and the
+# reply to a tool result repeats the result.
 class StubEngine
   getter requests = [] of JSON::Any
   property empty_replies = 0
+  property tool_call : {String, String}? = nil
 
   def initialize
     @server = HTTP::Server.new do |ctx|
@@ -18,7 +21,15 @@ class StubEngine
       messages = body["messages"].as_a
       system = messages.find { |m| m["role"] == "system" }.try(&.["content"].as_s) || ""
       last = messages.last["content"].as_s
-      reply = if @empty_replies > 0
+      if (call = @tool_call) && body["tools"]? && messages.last["role"] != "tool"
+        ctx.response.print({"id" => "x", "model" => body["model"], "choices" => [{"index" => 0, "finish_reason" => "tool_calls",
+                                                                                  "message" => {"role" => "assistant", "content" => nil, "tool_calls" => [{"id" => "call_1", "type" => "function",
+                                                                                                                                                           "function" => {"name" => call[0], "arguments" => call[1]}}]}}]}.to_json)
+        next
+      end
+      reply = if messages.last["role"] == "tool"
+                "tool said: #{last}"
+              elsif @empty_replies > 0
                 @empty_replies -= 1
                 ""
               else
@@ -172,6 +183,53 @@ describe GalateaFrontend::Server do
       p.rpc("ChatService/ChatDelete", {"id" => chat_id}, token)
       _, all = p.rpc("ChatService/ChatAll", token: token)
       all["chats"].as_a.should be_empty
+    end
+  end
+
+  it "runs /commands against the AtomSpace without calling the model" do
+    with_platform do |p|
+      token = signed_in(p)
+      p.rpc("BotService/BotCreate", {"bot" => {"name" => "Galatea", "description" => "A sculpture come to life"}}, token)
+      _, created = p.rpc("ChatService/ChatCreate", {"botId" => "galatea"}, token)
+      chat_id = created["chat"]["id"].as_s
+
+      _, sent = p.rpc("ChatService/ChatSendMessage", {"chatId" => chat_id, "message" => "/inherit cat animal"}, token)
+      sent["message"]["message"].as_s.should contain(%(INHERITANCELINK (CONCEPTNODE "cat") (CONCEPTNODE "animal")))
+      _, sent = p.rpc("ChatService/ChatSendMessage", {"chatId" => chat_id, "message" => "/query cat"}, token)
+      sent["message"]["message"].as_s.should contain(%(CONCEPTNODE "cat"))
+      _, sent = p.rpc("ChatService/ChatSendMessage", {"chatId" => chat_id, "message" => "/tool query_atoms {\"name\": \"animal\"}"}, token)
+      sent["message"]["message"].as_s.should contain(%(CONCEPTNODE "animal"))
+      _, sent = p.rpc("ChatService/ChatSendMessage", {"chatId" => chat_id, "message" => "/tool nope"}, token)
+      sent["message"]["message"].as_s.should start_with("error: unknown tool")
+      _, sent = p.rpc("ChatService/ChatSendMessage", {"chatId" => chat_id, "message" => "/tokenize hi"}, token)
+      sent["message"]["message"].should eq("error: no engine attached")
+
+      p.engine.requests.should be_empty
+      p.galatea.cog_tools.atomspace.get_nodes_by_name("cat").size.should eq(1)
+      _, chat = p.rpc("ChatService/ChatGet", {"id" => chat_id}, token)
+      senders = chat["chat"]["messages"].as_a.map(&.["sender"].as_s)
+      senders.count("SENDER_TYPE_USER").should eq(5)
+      senders.last.should eq("SENDER_TYPE_BOT")
+    end
+  end
+
+  it "lets the model call crystalcog tools when tools are enabled" do
+    with_platform do |p|
+      p.galatea.tools_enabled = true
+      p.engine.tool_call = {"add_inheritance", %({"child": "dog", "parent": "animal"})}
+      token = signed_in(p)
+      p.rpc("BotService/BotCreate", {"bot" => {"name" => "Galatea", "description" => "A sculpture come to life"}}, token)
+      _, created = p.rpc("ChatService/ChatCreate", {"botId" => "galatea"}, token)
+      chat_id = created["chat"]["id"].as_s
+
+      _, sent = p.rpc("ChatService/ChatSendMessage", {"chatId" => chat_id, "message" => "Dogs are animals."}, token)
+      sent["message"]["message"].as_s.should eq(%(tool said: => (INHERITANCELINK (CONCEPTNODE "dog") (CONCEPTNODE "animal"))))
+
+      offered = p.engine.requests.first["tools"].as_a.map(&.["function"]["name"].as_s)
+      offered.should contain("add_inheritance")
+      offered.should contain("pln_reason")
+      p.engine.requests.last["messages"].as_a.map(&.["role"].as_s).last(2).should eq(["assistant", "tool"])
+      p.galatea.cog_tools.run("list inheritance").should contain(%(CONCEPTNODE "dog"))
     end
   end
 

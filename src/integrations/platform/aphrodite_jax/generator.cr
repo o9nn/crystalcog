@@ -4,6 +4,7 @@
 
 require "./qwen3"
 require "./tokenizer"
+require "./chat_format"
 
 module AphroditeJax
   class SamplingParams
@@ -61,10 +62,13 @@ module AphroditeJax
     # ChatML prompt (Qwen's chat format); an empty think block turns off
     # Qwen3's reasoning mode.
     def chat_prompt(messages : Array({String, String})) : String
-      String.build do |io|
-        messages.each { |(role, content)| io << "<|im_start|>" << role << '\n' << content << "<|im_end|>\n" }
-        io << "<|im_start|>assistant\n<think>\n\n</think>\n\n"
-      end
+      chat_prompt(messages.map { |(role, content)| JSON::Any.new({"role" => JSON::Any.new(role), "content" => JSON::Any.new(content)}) })
+    end
+
+    # Prompt for OpenAI-style messages, with function calling when `tools`
+    # (OpenAI tool definitions) are given; see ChatFormat.
+    def chat_prompt(messages : Array(JSON::Any), tools : Array(JSON::Any)? = nil, thinking : Bool = false) : String
+      ChatFormat.prompt(messages, tools, thinking)
     end
 
     # Generate a completion. The block, if given, receives each new piece
