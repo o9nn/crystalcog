@@ -91,8 +91,30 @@ module PaphosBackend
       end
     end
 
+    # A named document a user stores: cognitive state, an exported
+    # AtomSpace, any string fields. (Not part of upstream Paphos.)
+    class Snapshot
+      include JSON::Serializable
+      property key : String
+      property owner_id : Int64
+      property data : Hash(String, String)
+      property updated_at : Int64
+
+      def initialize(@key, @owner_id, @data, @updated_at)
+      end
+
+      def summary
+        {"key" => key, "updated_at" => updated_at, "bytes" => data.sum { |k, v| k.bytesize + v.bytesize }}
+      end
+
+      def full
+        {"key" => key, "updated_at" => updated_at, "data" => data}
+      end
+    end
+
     class Store
       include JSON::Serializable
+      property snapshots = [] of Snapshot
       property users = [] of Hash(String, String)
       property characters = [] of Character
       property chats = [] of Chat
@@ -194,6 +216,10 @@ module PaphosBackend
           chat_member(ctx, method, seg[1], current_user(ctx))
         elsif seg.size == 3 && seg[0] == "chats" && seg[2] == "messages"
           chat_messages(ctx, method, seg[1], current_user(ctx))
+        elsif seg.size == 1 && seg[0] == "snapshots" && method == "GET"
+          list_snapshots(ctx, current_user(ctx))
+        elsif seg.size == 2 && seg[0] == "snapshots"
+          snapshot_member(ctx, method, URI.decode(seg[1]), current_user(ctx))
         else
           not_found(ctx.request.path)
         end
@@ -423,6 +449,59 @@ module PaphosBackend
           m
         end
         respond(ctx, {"message" => message.to_h})
+      else
+        not_found(ctx.request.path)
+      end
+    end
+
+    # ----------------------------------------------------------- snapshots
+
+    SNAPSHOT_KEY = /\A[A-Za-z0-9._:-]{1,200}\z/
+
+    # GET /snapshots lists the caller's snapshots; query parameters keep
+    # only those whose data has the given field values.
+    private def list_snapshots(ctx, user)
+      filters = ctx.request.query_params.to_h
+      mine = @store.snapshots.select do |snapshot|
+        snapshot.owner_id == user.id && filters.all? { |field, value| snapshot.data[field]? == value }
+      end
+      respond(ctx, {"snapshots" => mine.sort_by(&.key).map(&.summary)})
+    end
+
+    private def snapshot_member(ctx, method, key : String, user)
+      unless key.matches?(SNAPSHOT_KEY)
+        raise ApiError.new(400, "Invalid params", "key", "key must be 1-200 characters of A-Z a-z 0-9 . _ : -")
+      end
+      existing = @store.snapshots.find { |snapshot| snapshot.owner_id == user.id && snapshot.key == key }
+      case method
+      when "GET"
+        respond(ctx, {"snapshot" => (existing || not_found(ctx.request.path)).full})
+      when "PUT"
+        params = param_key(ctx, "snapshot")
+        fields = params["data"]?.try(&.as_h?) || raise ApiError.new(400, "Invalid params", "data", "data must be an object")
+        data = fields.to_h do |field, value|
+          {field, value.as_s? || raise ApiError.new(400, "Invalid params", "data", "data.#{field} must be a string")}
+        end
+        snapshot = @mutex.synchronize do
+          saved = existing
+          if saved
+            saved.data = data
+            saved.updated_at = Time.utc.to_unix_ms
+          else
+            saved = Snapshot.new(key, user.id, data, Time.utc.to_unix_ms)
+            @store.snapshots << saved
+          end
+          persist
+          saved
+        end
+        respond(ctx, {"snapshot" => snapshot.summary})
+      when "DELETE"
+        found = existing || not_found(ctx.request.path)
+        @mutex.synchronize do
+          @store.snapshots.delete(found)
+          persist
+        end
+        respond(ctx, {"snapshot" => found.summary})
       else
         not_found(ctx.request.path)
       end

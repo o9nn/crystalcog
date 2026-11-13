@@ -11,7 +11,7 @@
 require "json"
 require "http/client"
 require "../cogutil/logger"
-require "../atomspace/atomspace"
+require "../atomspace/atomspace_main"
 require "./platform/paphos_client"
 
 module PaphosBackend
@@ -248,121 +248,148 @@ module PaphosBackend
     end
   end
 
-  # PostgreSQL-compatible persistence layer
+  # Persistence through the Paphos backend's snapshot store: named
+  # documents of string fields, owned by the authenticated user.
+  #
+  # Writes go straight to the backend. With `batch_writes`, or while no
+  # client is attached, they wait in `batch_queue` until `flush_batch`
+  # sends them; a queued write is still visible to `load_snapshot`.
   class PersistenceLayer
+    ATOMSPACE_SNAPSHOT = "atomspace"
+    ATOMSPACE_FORMAT   = "crystalcog-text-v1"
+    BATCH_LIMIT        = 10
+
     property backend_url : String
     property api_prefix : String
     property atomspace : AtomSpace::AtomSpace?
     property cache : Hash(String, String)
     property cache_enabled : Bool
     property batch_queue : Array(Hash(String, String))
+    property client : PaphosBackend::Client?
+    property batch_writes : Bool = false
+    getter last_error : String = ""
 
     def initialize(@backend_url : String, @api_prefix : String = "/api/v1", @cache_enabled = true)
       @atomspace = nil
       @cache = {} of String => String
       @batch_queue = [] of Hash(String, String)
+      @client = nil
     end
 
-    # Store AtomSpace data to Paphos backend (PostgreSQL-compatible)
-    def store_atomspace_data : Bool
-      return false unless @atomspace
+    # Store the attached AtomSpace: every atom, with its truth value.
+    def store_atomspace_data(snapshot_id : String = ATOMSPACE_SNAPSHOT) : Bool
+      atomspace = @atomspace || return false
 
-      CogUtil::Logger.info("Storing AtomSpace data to Paphos backend (PostgreSQL format)")
-
-      # Serialize atomspace for PostgreSQL-compatible storage
-      data = {
-        "operation" => "store_atomspace",
-        "timestamp" => Time.utc.to_s,
-        "format"    => "postgresql_jsonb",
-      }
-
-      @batch_queue << data
-      flush_batch if @batch_queue.size >= 10
-
-      true
+      CogUtil::Logger.info("Storing AtomSpace (#{atomspace.size} atoms) to Paphos backend")
+      store_snapshot(snapshot_id, {
+        "format"     => ATOMSPACE_FORMAT,
+        "atom_count" => atomspace.size.to_s,
+        "atoms"      => AtomSpace::Serialization.to_text(atomspace),
+      })
     end
 
-    # Load AtomSpace data from Paphos backend
-    def load_atomspace_data : Bool
-      return false unless @atomspace
+    # Load a stored AtomSpace into the attached one. False when nothing is
+    # attached, nothing is stored, or the stored text cannot be read.
+    def load_atomspace_data(snapshot_id : String = ATOMSPACE_SNAPSHOT) : Bool
+      atomspace = @atomspace || return false
 
-      CogUtil::Logger.info("Loading AtomSpace data from Paphos backend")
-
-      # Check cache first
-      cache_key = "atomspace_data"
-      if @cache_enabled && @cache.has_key?(cache_key)
-        CogUtil::Logger.debug("AtomSpace data loaded from cache")
-        return true
+      snapshot = load_snapshot(snapshot_id) || return false
+      unless snapshot["format"]? == ATOMSPACE_FORMAT && (atoms = snapshot["atoms"]?)
+        @last_error = "snapshot #{snapshot_id} is not an AtomSpace export"
+        return false
       end
-
-      # Load from backend
+      count = AtomSpace::Serialization.from_text(atomspace, atoms)
+      CogUtil::Logger.info("Loaded #{count} atoms from Paphos backend")
       true
+    rescue ex : AtomSpace::Serialization::ParseError
+      @last_error = ex.message || "malformed AtomSpace export"
+      false
     end
 
     # Store cognitive state snapshot
     def store_snapshot(snapshot_id : String, data : Hash(String, String)) : Bool
-      CogUtil::Logger.info("Storing cognitive snapshot: #{snapshot_id}")
-
       snapshot_data = data.merge({
-        "snapshot_id"    => snapshot_id,
-        "created_at"     => Time.utc.to_s,
-        "storage_format" => "postgresql_jsonb",
-      })
-
-      @batch_queue << snapshot_data
-
-      # Update cache
-      if @cache_enabled
-        @cache["snapshot_#{snapshot_id}"] = snapshot_data.to_json
-      end
-
-      true
-    end
-
-    # Load cognitive state snapshot
-    def load_snapshot(snapshot_id : String) : Hash(String, String)?
-      CogUtil::Logger.info("Loading cognitive snapshot: #{snapshot_id}")
-
-      # Check cache
-      cache_key = "snapshot_#{snapshot_id}"
-      if @cache_enabled && @cache.has_key?(cache_key)
-        CogUtil::Logger.debug("Snapshot loaded from cache")
-        return Hash(String, String).from_json(@cache[cache_key])
-      end
-
-      # Return mock loaded snapshot
-      {
         "snapshot_id" => snapshot_id,
-        "loaded_at"   => Time.utc.to_s,
-        "status"      => "loaded",
-        "source"      => "paphos_postgresql",
-      }
+        "created_at"  => Time.utc.to_rfc3339,
+      })
+      @cache["snapshot_#{snapshot_id}"] = snapshot_data.to_json if @cache_enabled
+
+      if @batch_writes || @client.nil?
+        @batch_queue.reject! { |queued| queued["snapshot_id"]? == snapshot_id }
+        @batch_queue << snapshot_data
+        flush_batch if @client && @batch_queue.size >= BATCH_LIMIT
+        true
+      else
+        write(snapshot_data)
+      end
     end
 
-    # Query stored data with PostgreSQL-compatible syntax
+    # Load cognitive state snapshot; nil when there is none.
+    def load_snapshot(snapshot_id : String) : Hash(String, String)?
+      cache_key = "snapshot_#{snapshot_id}"
+      if @cache_enabled && (cached = @cache[cache_key]?)
+        return Hash(String, String).from_json(cached)
+      end
+      if queued = @batch_queue.find { |entry| entry["snapshot_id"]? == snapshot_id }
+        return queued
+      end
+
+      client = @client || return nil
+      data = client.snapshot(snapshot_id) || return nil
+      @cache[cache_key] = data.to_json if @cache_enabled
+      data
+    rescue ex : PaphosBackend::Client::Error | IO::Error | Socket::Error
+      @last_error = ex.message || ex.class.name
+      nil
+    end
+
+    # Stored snapshots whose fields have the given values, as summaries
+    # (snapshot_id, updated_at, bytes). An empty query lists them all.
     def query_data(query : Hash(String, String)) : Array(Hash(String, String))
-      CogUtil::Logger.debug("Querying Paphos backend: #{query}")
-
-      results = [] of Hash(String, String)
-
-      # Add query result
-      results << {
-        "query_processed" => "true",
-        "backend"         => "paphos_postgresql",
-        "timestamp"       => Time.utc.to_s,
-      }
-
-      results
+      client = @client
+      unless client
+        return @batch_queue.select { |entry| query.all? { |field, value| entry[field]? == value } }
+          .map { |entry| {"snapshot_id" => entry["snapshot_id"]? || "", "pending" => "true"} }
+      end
+      client.snapshots(query).map do |summary|
+        {"snapshot_id" => summary["key"].as_s, "updated_at" => summary["updated_at"].as_i64.to_s,
+         "bytes" => summary["bytes"].as_i64.to_s}
+      end
+    rescue ex : PaphosBackend::Client::Error | IO::Error | Socket::Error
+      @last_error = ex.message || ex.class.name
+      [] of Hash(String, String)
     end
 
-    # Flush batch operations
-    def flush_batch : Int32
-      return 0 if @batch_queue.empty?
+    def delete_snapshot(snapshot_id : String) : Bool
+      @cache.delete("snapshot_#{snapshot_id}")
+      @batch_queue.reject! { |queued| queued["snapshot_id"]? == snapshot_id }
+      client = @client || return false
+      client.delete_snapshot(snapshot_id)
+      true
+    rescue ex : PaphosBackend::Client::Error | IO::Error | Socket::Error
+      @last_error = ex.message || ex.class.name
+      false
+    end
 
-      count = @batch_queue.size
-      CogUtil::Logger.debug("Flushing #{count} batch operations to Paphos backend")
-      @batch_queue.clear
-      count
+    # Send the queued writes. Returns how many the backend accepted; the
+    # rest stay queued.
+    def flush_batch : Int32
+      return 0 if @batch_queue.empty? || @client.nil?
+
+      pending = @batch_queue.dup
+      sent = pending.select { |entry| write(entry) }
+      @batch_queue.reject! { |entry| sent.includes?(entry) }
+      sent.size
+    end
+
+    private def write(snapshot_data : Hash(String, String)) : Bool
+      client = @client || return false
+      client.put_snapshot(snapshot_data["snapshot_id"], snapshot_data)
+      true
+    rescue ex : PaphosBackend::Client::Error | IO::Error | Socket::Error
+      @last_error = ex.message || ex.class.name
+      CogUtil::Logger.error("Paphos snapshot write failed: #{@last_error}")
+      false
     end
 
     # Clear cache
@@ -378,6 +405,7 @@ module PaphosBackend
         "cache_size"         => @cache.size.to_s,
         "batch_queue_size"   => @batch_queue.size.to_s,
         "atomspace_attached" => (!@atomspace.nil?).to_s,
+        "backend_attached"   => (!@client.nil?).to_s,
       }
     end
   end
@@ -505,6 +533,11 @@ module PaphosBackend
         return false
       end
       @client.token = @auth_handler.token
+      # Persistence talks to the backend from here on; anything stored
+      # while offline is sent now.
+      @persistence.client = @client
+      @persistence.batch_writes = @config.batch_operations
+      @persistence.flush_batch unless @config.batch_operations
 
       # Connect event stream if enabled
       if @config.event_streaming_enabled
@@ -613,6 +646,7 @@ module PaphosBackend
         "grip_state"        => @cognitive_coordinator.grip_state.to_json,
         "coordination_mode" => @config.grip_coordination_mode.to_s,
         "timestamp"         => Time.utc.to_s,
+        "kind"              => "cognitive_state",
       }
 
       @persistence.store_snapshot(snapshot_id, snapshot_data)

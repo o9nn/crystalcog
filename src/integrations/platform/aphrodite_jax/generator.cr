@@ -41,7 +41,11 @@ module AphroditeJax
     end
   end
 
-  record Generation, text : String, finish_reason : String, prompt_tokens : Int32, completion_tokens : Int32
+  # `mean_token_probability` is the geometric mean of the probability the
+  # model gave each token it produced: near 1 when it was sure of every
+  # step, low when it was choosing among many continuations.
+  record Generation, text : String, finish_reason : String, prompt_tokens : Int32, completion_tokens : Int32,
+    mean_token_probability : Float64 = 0.0
 
   class Generator
     getter model : Qwen3
@@ -104,6 +108,7 @@ module AphroditeJax
       out_ids = [] of Int32
       emitted = 0
       finish = "length"
+      log_probability = 0.0
 
       max_tokens.times do
         token = sample(logits, params, history, rng)
@@ -111,12 +116,13 @@ module AphroditeJax
           finish = "stop"
           break
         end
+        log_probability += token_log_probability(logits, token)
         out_ids << token
         history << token
         text = @tokenizer.decode(out_ids, skip_special: true)
         if cut = stop_index(text, params.stop)
           on_text.call(text[emitted...cut]) if cut > emitted
-          return finish_with(text[0...cut], "stop", prompt_ids, out_ids)
+          return finish_with(text[0...cut], "stop", prompt_ids, out_ids, log_probability)
         end
         safe = safe_emit_length(text, params.stop)
         if safe > emitted
@@ -130,11 +136,22 @@ module AphroditeJax
 
       text = @tokenizer.decode(out_ids, skip_special: true)
       on_text.call(text[emitted..]) if text.size > emitted
-      finish_with(text, finish, prompt_ids, out_ids)
+      finish_with(text, finish, prompt_ids, out_ids, log_probability)
     end
 
-    private def finish_with(text, reason, prompt_ids, out_ids) : Generation
-      Generation.new(text, reason, prompt_ids.size, out_ids.size)
+    private def finish_with(text, reason, prompt_ids, out_ids, log_probability = 0.0) : Generation
+      mean = out_ids.empty? ? 0.0 : Math.exp(log_probability / out_ids.size)
+      Generation.new(text, reason, prompt_ids.size, out_ids.size, mean)
+    end
+
+    # log softmax(logits)[token], at temperature 1.
+    private def token_log_probability(logits : Slice(Float32), token : Int32) : Float64
+      vocab = Math.min(logits.size, @tokenizer.vocab_size)
+      max = logits[0]
+      (1...vocab).each { |i| max = logits[i] if logits[i] > max }
+      total = 0.0
+      vocab.times { |i| total += Math.exp((logits[i] - max).to_f64) }
+      (logits[token] - max).to_f64 - Math.log(total)
     end
 
     private def stop_index(text : String, stops : Array(String)) : Int32?
