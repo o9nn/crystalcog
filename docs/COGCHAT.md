@@ -34,6 +34,7 @@ The native Crystal engine (`aphrodite_jax`, Qwen3) is part of the `crystalcog` b
 | `ure_forward_chain` | none | `ure` (URE forward chainer) |
 | `nlp_process` | `text` | `nlp` |
 | `parse_sentence` | `text` | `parse` (Link Grammar) |
+| `see_image` | `path`, optional `scene` | `see` (vision: describes an image and adds it as a scene; see [VISION.md](VISION.md)) |
 | `atomspace_stats` | none | `size` |
 
 `crystalcog tools --json` prints the schemas exactly as the model sees them.

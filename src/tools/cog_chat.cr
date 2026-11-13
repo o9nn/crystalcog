@@ -24,7 +24,9 @@ module CrystalCog
     alias ToolCall = AphroditeJax::ChatFormat::ToolCall
     alias SamplingParams = AphroditeJax::SamplingParams
 
-    record Reply, content : String, tool_calls : Array(ToolCall), finish_reason : String
+    # `confidence` is the model's mean per-token probability for the reply
+    # (0 when the engine does not report it).
+    record Reply, content : String, tool_calls : Array(ToolCall), finish_reason : String, confidence : Float64 = 0.0
 
     abstract class Engine
       # Qwen3 reasoning mode: the model thinks in <think>...</think> before
@@ -85,14 +87,14 @@ module CrystalCog
           elsif result.text.size > emitted
             on_text.call(result.text[emitted..])
           end
-          return Reply.new(answer.strip, calls, result.finish_reason)
+          return Reply.new(answer.strip, calls, result.finish_reason, result.mean_token_probability)
         end
-        Reply.new(content, calls, "tool_calls")
+        Reply.new(content, calls, "tool_calls", result.mean_token_probability)
       end
 
       private def plain(prompt, params, on_text) : Reply
         result = @generator.generate(prompt, params) { |piece| on_text.call(piece) }
-        Reply.new(result.text.strip, [] of ToolCall, result.finish_reason)
+        Reply.new(result.text.strip, [] of ToolCall, result.finish_reason, result.mean_token_probability)
       end
 
       private def safe_length(text : String) : Int32
@@ -214,7 +216,7 @@ module CrystalCog
       /reset                    forget the conversation (the AtomSpace stays)
       /system TEXT              replace the system prompt
       /COGSHELL-COMMAND ...     any CogShell command: /concept, /inherit, /eval, /imply,
-                                /query, /list, /size, /reason, /ure, /nlp, /parse, /tv, /clear
+                                /query, /list, /size, /reason, /ure, /nlp, /parse, /tv, /see, /clear
     TEXT
 
     # Commands shared by every chat front end. `engine` may be nil where no

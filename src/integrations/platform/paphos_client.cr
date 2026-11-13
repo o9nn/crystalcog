@@ -96,6 +96,30 @@ module PaphosBackend
       request("POST", "/chats/#{URI.encode_path_segment(chat_id)}/messages", body)["message"]
     end
 
+    # Snapshots: named documents of string fields, owned by the caller.
+    # `filter` keeps the snapshots whose data has the given field values.
+    def snapshots(filter : Hash(String, String) = {} of String => String) : Array(JSON::Any)
+      query = filter.empty? ? "" : "?" + URI::Params.encode(filter)
+      request("GET", "/snapshots#{query}")["snapshots"].as_a
+    end
+
+    # A snapshot's data, or nil when there is none under `key`.
+    def snapshot(key : String) : Hash(String, String)?
+      request("GET", "/snapshots/#{URI.encode_path_segment(key)}")["snapshot"]["data"].as_h.transform_values(&.as_s)
+    rescue ex : Error
+      raise ex unless ex.status == 404
+      nil
+    end
+
+    def put_snapshot(key : String, data : Hash(String, String)) : JSON::Any
+      request("PUT", "/snapshots/#{URI.encode_path_segment(key)}", {"snapshot" => {"data" => data}})["snapshot"]
+    end
+
+    def delete_snapshot(key : String) : Nil
+      request("DELETE", "/snapshots/#{URI.encode_path_segment(key)}")
+      nil
+    end
+
     private def request(method : String, path : String, body = nil, auth : Bool = true) : JSON::Any
       uri = URI.parse(@base_url + path)
       headers = HTTP::Headers{"Accept" => "application/json"}

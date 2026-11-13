@@ -29,6 +29,7 @@ require "uri"
 require "base64"
 require "../cogutil/logger"
 require "../atomspace/atomspace"
+require "./echo_state"
 
 module PygmalionAgent
   VERSION = "0.3.0"
@@ -2504,31 +2505,67 @@ module PygmalionAgent
       regenerate
     end
 
-    # Process message through Echo State Networks
-    private def process_echo_state(message : String)
-      return unless @config.echo_state.cognitive_binding
+    @reservoir : EchoStateReservoir? = nil
 
-      CogUtil::Logger.debug("Processing message through Echo State Networks")
-
-      # Extract cognitive context from AtomSpace if attached
-      if atomspace = @atomspace
-        context = get_cognitive_context
-        unless context.empty?
-          CogUtil::Logger.debug("Cognitive context: #{context.size} concepts")
-        end
+    # The agent's Echo State reservoir, built on first use from the
+    # echo_state configuration.
+    def reservoir : EchoStateReservoir
+      @reservoir ||= begin
+        echo = @config.echo_state
+        EchoStateReservoir.new(echo.reservoir_size, echo.spectral_radius, echo.sparsity,
+          echo.input_scaling, echo.leaking_rate)
       end
     end
 
-    # Compute tensor signatures for cognitive state
-    def compute_tensor_signatures : Hash(String, Array(Float64))
-      CogUtil::Logger.debug("Computing tensor signatures")
+    # Process message through Echo State Networks: the message, then the
+    # concepts the stored conversation keeps returning to, drive the
+    # reservoir, so its state carries both what was just said and what the
+    # conversation is about.
+    private def process_echo_state(message : String)
+      return unless @config.echo_state.cognitive_binding
 
-      # Placeholder for actual tensor computation
-      {
+      echo = reservoir
+      echo.feed(message)
+      if @atomspace
+        context = get_cognitive_context
+        echo.feed(context.join(" ")) unless context.empty?
+        CogUtil::Logger.debug("Echo state driven by message and #{context.size} context concept(s)")
+      end
+    end
+
+    # How strongly `text` resonates with the conversation so far: the cosine
+    # similarity between the reservoir's state and the state the text alone
+    # would produce. The agent's own reservoir is not changed.
+    def echo_resonance(text : String) : Float64
+      echo = @config.echo_state
+      probe = EchoStateReservoir.new(echo.reservoir_size, echo.spectral_radius, echo.sparsity,
+        echo.input_scaling, echo.leaking_rate)
+      probe.feed(text)
+      EchoStateReservoir.similarity(reservoir.state, probe.state)
+    end
+
+    # Tensor signatures of the cognitive state:
+    #   reservoir_state  the reservoir's activations
+    #   gestalt_state    a six-number summary of them (EchoStateReservoir#gestalt)
+    #   prime_factors    the reservoir size as a product of primes: its tensor shape
+    #   rooted_trees     A000081 up to that many factors: how many ways the
+    #                    factors can nest
+    def compute_tensor_signatures : Hash(String, Array(Float64))
+      empty = {
         "prime_factors"   => [] of Float64,
         "rooted_trees"    => [] of Float64,
         "gestalt_state"   => [] of Float64,
         "reservoir_state" => [] of Float64,
+      }
+      return empty unless @config.echo_state.tensor_signatures
+
+      echo = reservoir
+      factors = EchoStateReservoir.prime_factors(echo.size)
+      {
+        "prime_factors"   => factors.map(&.to_f64),
+        "rooted_trees"    => EchoStateReservoir.rooted_trees(factors.size).map(&.to_f64),
+        "gestalt_state"   => echo.gestalt,
+        "reservoir_state" => echo.state.dup,
       }
     end
 
