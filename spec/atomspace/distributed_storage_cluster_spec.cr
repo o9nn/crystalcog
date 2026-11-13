@@ -35,9 +35,19 @@ private class TwoNodes
     storage.get_stats["local_atoms"].as(Int).to_i64
   end
 
-  # Cluster messages are delivered by fibers on real sockets.
-  def settle
-    sleep 300.milliseconds
+  def total_atoms : Int64
+    local_atoms(@first) + local_atoms(@second)
+  end
+
+  # Cluster messages are delivered by fibers over real sockets, so the
+  # nodes agree a little after a call returns. Wait until the block holds
+  # (the assertions that follow still decide the outcome).
+  def settle(limit : Time::Span = 10.seconds, &) : Nil
+    deadline = Time.monotonic + limit
+    until yield
+      break if Time.monotonic > deadline
+      sleep 20.milliseconds
+    end
   end
 
   def close
@@ -91,9 +101,9 @@ describe "DistributedStorageNode across two nodes" do
     two_nodes(AtomSpace::PartitionStrategy::HashBased, AtomSpace::ReplicationStrategy::SingleCopy) do |nodes|
       _, atoms = sample_graph
       atoms.each { |atom| nodes.first.store_atom(atom).should be_true }
-      nodes.settle
+      nodes.settle { nodes.total_atoms == atoms.size }
 
-      (nodes.local_atoms(nodes.first) + nodes.local_atoms(nodes.second)).should eq(atoms.size)
+      nodes.total_atoms.should eq(atoms.size)
       atoms.each do |atom|
         fetched = nodes.first.fetch_atom(atom.handle).not_nil!
         fetched.to_s.should eq(atom.to_s)
@@ -108,7 +118,7 @@ describe "DistributedStorageNode across two nodes" do
     two_nodes(AtomSpace::PartitionStrategy::HashBased, AtomSpace::ReplicationStrategy::PrimaryBackup) do |nodes|
       _, atoms = sample_graph
       atoms.each { |atom| nodes.first.store_atom(atom).should be_true }
-      nodes.settle
+      nodes.settle { nodes.local_atoms(nodes.first) == atoms.size && nodes.local_atoms(nodes.second) == atoms.size }
       nodes.local_atoms(nodes.first).should eq(atoms.size)
       nodes.local_atoms(nodes.second).should eq(atoms.size)
 
@@ -122,7 +132,7 @@ describe "DistributedStorageNode across two nodes" do
 
       link = atoms.find!(&.link?)
       nodes.first.remove_atom(link).should be_true
-      nodes.settle
+      nodes.settle { nodes.total_atoms == 2 * (atoms.size - 1) }
       nodes.local_atoms(nodes.first).should eq(atoms.size - 1)
       nodes.local_atoms(nodes.second).should eq(atoms.size - 1)
       nodes.second.fetch_atom_by_content(link).should be_nil
@@ -134,13 +144,13 @@ describe "DistributedStorageNode across two nodes" do
       space = AtomSpace::AtomSpace.new
       atoms = (0...20).map { |i| space.add_concept_node("concept-#{i}", AtomSpace::SimpleTruthValue.new(0.3, 0.9)) }
       atoms.each { |atom| nodes.first.store_atom(atom).should be_true }
-      nodes.settle
+      nodes.settle { nodes.total_atoms == 20 }
 
       counts = [nodes.local_atoms(nodes.first), nodes.local_atoms(nodes.second)]
       counts.sort.should eq([0, 20])
 
       nodes.first.rebalance_cluster.should be_true
-      nodes.settle
+      nodes.settle { nodes.local_atoms(nodes.first) == 10 && nodes.local_atoms(nodes.second) == 10 }
       nodes.local_atoms(nodes.first).should eq(10)
       nodes.local_atoms(nodes.second).should eq(10)
       nodes.first.distribution_metrics["balance_score"].as_f.should eq(1.0)
@@ -156,7 +166,7 @@ describe "DistributedStorageNode across two nodes" do
     two_nodes(AtomSpace::PartitionStrategy::HashBased, AtomSpace::ReplicationStrategy::SingleCopy) do |nodes|
       _, atoms = sample_graph
       atoms.each { |atom| nodes.first.store_atom(atom).should be_true }
-      nodes.settle
+      nodes.settle { nodes.total_atoms == atoms.size }
 
       loaded = AtomSpace::AtomSpace.new
       nodes.second.load_atomspace(loaded).should be_true

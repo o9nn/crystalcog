@@ -51,6 +51,15 @@ private class StubKubo
   end
 end
 
+# The subscription stream opens in a fiber; poll until the daemon has it.
+private def wait_until(limit : Time::Span = 10.seconds, &) : Nil
+  deadline = Time.monotonic + limit
+  until yield
+    break if Time.monotonic > deadline
+    sleep 10.milliseconds
+  end
+end
+
 private def receive_within(channel : Channel(T), span = 5.seconds) : T forall T
   select
   when value = channel.receive
@@ -78,7 +87,7 @@ describe CrystalCog::Integrations::IPFSPubsub do
 
       received = Channel(String).new(8)
       pubsub.subscribe("crystalcog/test") { |message| received.send(message) }
-      sleep 100.milliseconds
+      wait_until { client.pubsub_topics == ["crystalcog/test"] }
       pubsub.subscribed?("crystalcog/test").should be_true
       client.pubsub_topics.should eq(["crystalcog/test"])
 
@@ -121,7 +130,8 @@ describe CrystalCog::Integrations::IPFSPubsub do
       announcer = make_sync.call
       updates = Channel(String).new(4)
       listener.start_sync { |cid| updates.send(cid.hash) }
-      sleep 100.milliseconds
+      probe = CrystalCog::Integrations::IPFSClient.new(config)
+      wait_until { probe.pubsub_topics.size == 1 }
 
       announcer.broadcast_update(CrystalCog::Integrations::IPFSCid.new("QmSnapshot42"))
       receive_within(updates).should eq("QmSnapshot42")

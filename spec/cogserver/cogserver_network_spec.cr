@@ -5,11 +5,32 @@ require "json"
 require "socket"
 require "../../src/cogserver/cogserver_shell"
 
+# Poll until the block holds, for up to `limit`. Used where another fiber
+# finishes the work (accepting a connection, tearing a session down); the
+# assertions that follow still decide the outcome.
+private def eventually(limit : Time::Span = 10.seconds, &) : Nil
+  deadline = Time.monotonic + limit
+  until yield
+    break if Time.monotonic > deadline
+    sleep 10.milliseconds
+  end
+end
+
+# Server#start binds its listeners in fibers; wait until HTTP answers.
+private def wait_for_http(port : Int32) : Nil
+  eventually do
+    begin
+      HTTP::Client.get("http://127.0.0.1:#{port}/ping").status_code == 200
+    rescue Socket::Error | IO::Error
+      false
+    end
+  end
+end
+
 private def with_server(telnet_port : Int32, ws_port : Int32, &)
   server = CogServer::Server.new("127.0.0.1", telnet_port, ws_port)
   server.start
-  # Server#start binds in fibers; yielding lets both listeners come up.
-  sleep 100.milliseconds
+  wait_for_http(ws_port)
   begin
     yield server
   ensure
@@ -88,7 +109,7 @@ describe "CogServer telnet port" do
       socket << "quit\r\n"
       socket.gets_to_end.should contain("Goodbye")
       socket.close
-      sleep 50.milliseconds
+      eventually { server.stats["active_sessions"] == 0 }
       server.stats["active_sessions"].should eq(0)
     end
   end
@@ -210,7 +231,7 @@ describe "CogServer WebSocket" do
       next_message(inbox)["type"].should eq("pong")
 
       socket.close
-      sleep 100.milliseconds
+      eventually { server.stats["active_sessions"] == 0 && server.broadcaster.active_monitors == 0 }
       server.stats["active_sessions"].should eq(0)
       server.broadcaster.active_monitors.should eq(0)
     end
@@ -233,7 +254,7 @@ describe "CogServer WebSocket" do
       next_of_type(second_inbox, "AtomRemoved")["data"]["handle"].should eq(atom.handle.to_i64)
 
       first.close
-      sleep 100.milliseconds
+      eventually { server.broadcaster.active_monitors == 1 }
       server.broadcaster.active_monitors.should eq(1)
       gone = server.atomspace.add_concept_node("still-works")
       server.atomspace.remove_atom(gone)

@@ -6,7 +6,17 @@ require "../../src/cogserver/cogserver"
 private def with_cog_server(telnet_port : Int32, ws_port : Int32, &)
   server = CogServer::Server.new("127.0.0.1", telnet_port, ws_port)
   server.start
-  sleep 100.milliseconds
+  # Server#start binds its listeners in fibers; wait until HTTP answers.
+  deadline = Time.monotonic + 10.seconds
+  loop do
+    ready = begin
+      HTTP::Client.get("http://127.0.0.1:#{ws_port}/ping").status_code == 200
+    rescue Socket::Error | IO::Error
+      false
+    end
+    break if ready || Time.monotonic > deadline
+    sleep 10.milliseconds
+  end
   begin
     yield server
   ensure
