@@ -36,6 +36,9 @@ module CrystalCog
       )
       end
 
+      # The path the RPC API lives under on the API host.
+      API_PATH = "/api/v0"
+
       def api_url : String
         "http://#{@api_host}:#{@api_port}/api/v0"
       end
@@ -337,7 +340,7 @@ module CrystalCog
         builder.finish
 
         response = create_client.post(
-          "#{@config.api_url}/dag/put?pin=#{pin}&input-codec=dag-json&store-codec=dag-cbor",
+          "#{IPFSConfig::API_PATH}/dag/put?pin=#{pin}&input-codec=dag-json&store-codec=dag-cbor",
           headers: HTTP::Headers{"Content-Type" => builder.content_type},
           body: io.to_s
         )
@@ -637,7 +640,7 @@ module CrystalCog
         builder.file("file", IO::Memory.new(data))
         builder.finish
 
-        url = "#{@config.api_url}/#{endpoint}?pin=#{pin}"
+        url = "#{IPFSConfig::API_PATH}/#{endpoint}?pin=#{pin}"
         response = create_client.post(
           url,
           headers: HTTP::Headers{"Content-Type" => builder.content_type},
@@ -650,8 +653,11 @@ module CrystalCog
         nil
       end
 
+      # The request target for an RPC endpoint: a path and query, as HTTP
+      # expects in a request line. (A full URL there is only read correctly
+      # by some servers.) The client already knows the host and port.
       private def build_url(endpoint : String, params : Hash(String, String)? = nil) : String
-        url = "#{@config.api_url}/#{endpoint}"
+        url = "#{IPFSConfig::API_PATH}/#{endpoint}"
         if params && !params.empty?
           query = params.map { |k, v| "#{URI.encode_www_form(k)}=#{URI.encode_www_form(v)}" }.join("&")
           url += "?#{query}"
