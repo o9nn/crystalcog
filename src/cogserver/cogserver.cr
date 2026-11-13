@@ -12,7 +12,6 @@ require "base64"
 require "../cogutil/cogutil"
 require "../atomspace/atomspace_main"
 require "../opencog/opencog"
-require "../tools/cogshell"
 
 module CogServer
   VERSION = "0.1.0"
@@ -42,7 +41,13 @@ module CogServer
     @sessions : Hash(String, Session)
     @sessions_mutex = Mutex.new
     @shell_mutex = Mutex.new
-    @shell : CogShell::Shell
+    @shell : Proc(String, String)?
+
+    # Builds the command shell for a server's AtomSpace. The AtomSpace core
+    # reaches this file through the cluster code, so the shell (PLN, URE,
+    # NLP, vision) is not required here: requiring "cogserver_shell"
+    # installs it. Without it only the built-in server commands exist.
+    class_property shell_factory : Proc(AtomSpace::AtomSpace, Proc(String, String))?
     @metrics : MetricsCollector
     @observer : AtomSpace::AtomSpaceSignal?
     @telnet_http : HTTP::Server::RequestProcessor?
@@ -50,7 +55,7 @@ module CogServer
     def initialize(@host : String = DEFAULT_HOST, @port : Int32 = DEFAULT_PORT, @ws_port : Int32 = DEFAULT_WS_PORT)
       @atomspace = AtomSpace::AtomSpace.new
       @sessions = Hash(String, Session).new
-      @shell = CogShell::Shell.new(@atomspace)
+      @shell = Server.shell_factory.try(&.call(@atomspace))
       @broadcaster = EventBroadcaster.new
       @metrics = MetricsCollector.new
 
@@ -233,9 +238,11 @@ module CogServer
       @sessions_mutex.synchronize { @sessions.delete(session.id) }
     end
 
-    # Run a CogShell command (AtomSpace, PLN, URE, NLP) on the server's AtomSpace.
+    # Run a CogShell command (AtomSpace, PLN, URE, NLP, vision) on the
+    # server's AtomSpace.
     def run_shell_command(command : String) : String
-      @shell_mutex.synchronize { @shell.eval_line(command).rstrip }
+      shell = @shell || return "Unknown command: #{command}. The knowledge base shell is not loaded."
+      @shell_mutex.synchronize { shell.call(command).rstrip }
     rescue ex
       "Error: #{ex.message}"
     end

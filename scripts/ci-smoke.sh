@@ -44,5 +44,5 @@ printf 'inherit ci_cat ci_animal\nquit\n' | curl --silent --show-error --max-tim
 # connection stays open, so curl is cut off after the headers.
 { curl --silent --include --max-time 2 -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
   -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' "$base/" || true; } \
-  | grep -i 'Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo='
+  | grep -ai 'Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo='
 printf 'Compiled CLI, shell, and CogServer HTTP, telnet and WebSocket smoke checks passed.\n'

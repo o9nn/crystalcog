@@ -3,7 +3,7 @@ require "http/client"
 require "http/web_socket"
 require "json"
 require "socket"
-require "../../src/cogserver/cogserver"
+require "../../src/cogserver/cogserver_shell"
 
 private def with_server(telnet_port : Int32, ws_port : Int32, &)
   server = CogServer::Server.new("127.0.0.1", telnet_port, ws_port)
@@ -260,5 +260,21 @@ describe CogServer::WebSocketMonitor do
     CogServer::MonitorEventType.resolve("HEARTBEAT").should eq("Heartbeat")
     CogServer::MonitorEventType.resolve("*").should eq("*")
     CogServer::MonitorEventType.resolve("nope").should be_nil
+  end
+end
+
+describe "CogServer without the knowledge base shell" do
+  it "still serves its built-in commands" do
+    factory = CogServer::Server.shell_factory
+    CogServer::Server.shell_factory = nil
+    begin
+      with_server(19196, 19197) do |server|
+        HTTP::Client.get("http://127.0.0.1:19196/?cmd=info").body.should contain("CogServer #{CogServer::VERSION}")
+        HTTP::Client.get("http://127.0.0.1:19196/?cmd=concept%20x").body.should contain("Unknown command: concept x")
+        server.atomspace.size.should eq(0)
+      end
+    ensure
+      CogServer::Server.shell_factory = factory
+    end
   end
 end
