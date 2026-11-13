@@ -216,7 +216,7 @@ module CrystalCog
       /reset                    forget the conversation (the AtomSpace stays)
       /system TEXT              replace the system prompt
       /COGSHELL-COMMAND ...     any CogShell command: /concept, /inherit, /eval, /imply,
-                                /query, /list, /size, /reason, /ure, /nlp, /parse, /tv, /clear
+                                /query, /list, /size, /reason, /ure, /nlp, /parse, /tv, /see, /clear
     TEXT
 
     # Commands shared by every chat front end. `engine` may be nil where no

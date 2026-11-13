@@ -150,6 +150,11 @@ module CrystalCog
         Tool.new("parse_sentence", "Parse an English sentence with Link Grammar and show its linkages.",
           [Param.new("text", "string", "Sentence to parse")],
           ->(a : JSON::Any) { "parse #{str(a, "text").delete('"')}" }),
+        Tool.new("see_image", "Look at an image file (PNG or PPM): find the coloured shapes in it and how they are " \
+                              "arranged, describe them, and add them to the knowledge base as a scene.",
+          [Param.new("path", "string", "Path of the image file"),
+           Param.new("scene", "string", "Name for the scene (default: the file name)", false)],
+          ->(a : JSON::Any) { "see #{q(str(a, "path"))} #{opt(a, "scene").try { |name| q(name) }}".strip }),
         Tool.new("atomspace_stats", "Show how many atoms, nodes and links the knowledge base holds.",
           Array(Param).new,
           ->(a : JSON::Any) { "size" }),
