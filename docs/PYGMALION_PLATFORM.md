@@ -13,7 +13,7 @@ client ──Connect JSON──▶ Galatea server ──REST──▶ Paphos bac
 | Component | Code | Contract it implements |
 |---|---|---|
 | Galatea frontend server | `src/integrations/platform/galatea_server.cr` | `galatea.v1` `AuthService`, `BotService` and `ChatService` from [9cog/galatea-frontend](https://github.com/9cog/galatea-frontend) `shared/galatea/v1/*.proto`, over the Connect JSON protocol. Also the web app's `/api/auth/{signup,login,status,logout}` routes, `/api/health`, and static serving of `web/dist` with an SPA fallback. |
-| Paphos backend | `src/integrations/platform/paphos_server.cr`, `paphos_client.cr` | The `/api/v1` REST API of [9cog/paphos-backend](https://github.com/9cog/paphos-backend): Lucky-style `{"user": {...}}` bodies, HS256 JWT bearer auth, `{message,param,details}` errors, characters and chats. Adds `GET`/`POST /chats/:id/messages`, which upstream lacks. |
+| Paphos backend | `src/integrations/platform/paphos_server.cr`, `paphos_client.cr` | The `/api/v1` REST API of [9cog/paphos-backend](https://github.com/9cog/paphos-backend): Lucky-style `{"user": {...}}` bodies, HS256 JWT bearer auth, `{message,param,details}` errors, characters and chats. Adds `GET`/`POST /chats/:id/messages` and a per-user snapshot store (`GET /snapshots`, `GET`/`PUT`/`DELETE /snapshots/:key`), which upstream lacks. |
 | Aphrodite engine | `src/integrations/platform/aphrodite_engine.cr` | Launches and supervises an OpenAI-compatible inference server and gives `PygmalionAgent` its endpoint. |
 | aphrodite_jax_server | `src/integrations/platform/aphrodite_jax_server.cr`, `aphrodite_jax/*.cr`, `src/bin/aphrodite_jax_server.cr` | Native Crystal port of [aphrodite-jax](https://github.com/aphrodite-engine/aphrodite-jax)'s small-model engine (Qwen3), with no Python. It has a safetensors loader, a byte-level BPE tokenizer, the Qwen3 forward pass with a KV cache, a sampler, and an OpenAI-compatible HTTP server. |
 | Stack | `src/integrations/platform/stack.cr`, `crystalcog platform` | Starts all three and wires them together. |
@@ -106,6 +106,13 @@ rpc ChatService/ChatSendMessage "{\"chatId\":\"$CHAT\",\"message\":\"How do you 
 `ChatSubscribe` (server streaming) and `AuthService/Verify` return `unimplemented`.
 
 Chat messages that start with `/` are crystalcog commands, such as `/inherit cat animal`, `/reason 3` or `/query cat`. They run against the platform's AtomSpace without calling the model. With `PLATFORM_TOOLS=1`, which is the default for the `aphrodite_jax` backend, the model can also call crystalcog's tools while it replies. See [COGCHAT.md](COGCHAT.md), which also covers the `crystalcog chat`, `generate`, `tokenize`, `cog`, `tool` and `engine` commands.
+
+## Persistence
+
+`PaphosBackend::Connector` (`src/integrations/paphos_connector.cr`) stores cognitive state through the snapshot store:
+- `store_snapshot(id)` / `load_snapshot(id)` save and restore the coordinator's state.
+- `persistence.store_atomspace_data` / `load_atomspace_data` save and restore a whole AtomSpace, links and truth values included.
+- With `batch_operations`, or while offline, writes wait in a queue until `flush_batch`.
 
 ## Verification
 
