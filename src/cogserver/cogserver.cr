@@ -496,6 +496,8 @@ module CogServer
         handle_create_atom(context)
       when "/atoms"
         handle_atoms_request(context)
+      when .starts_with?("/atoms/")
+        handle_atom_request(context, context.request.path.lchop("/atoms/"))
       when "/sessions"
         handle_sessions_request(context)
       when "/ping"
@@ -599,19 +601,7 @@ module CogServer
 
         response = {
           "count" => atoms.size,
-          "atoms" => atoms.map { |atom|
-            {
-              "handle"      => atom.handle,
-              "type"        => atom.type.to_s,
-              "name"        => atom.node? ? atom.name : nil,
-              "outgoing"    => atom.link? ? atom.outgoing.map(&.handle) : nil,
-              "truth_value" => {
-                "strength"   => atom.truth_value.strength,
-                "confidence" => atom.truth_value.confidence,
-              },
-              "string" => atom.to_s,
-            }
-          },
+          "atoms" => atoms.map { |atom| atom_entry(atom) },
         }
 
         context.response.content_type = "application/json"
@@ -619,6 +609,17 @@ module CogServer
       when "POST"
         # Create new atom
         handle_create_atom(context)
+      when "DELETE"
+        # Remove the atom described by {"atom": <content form>}.
+        begin
+          data = JSON.parse(context.request.body.try(&.gets_to_end) || "")
+          described = AtomSpace::AtomWire.read(data["atom"]? || data) { |handle| @atomspace.get_atom(handle) }
+          remove_atom_response(context, @atomspace.find_equivalent(described))
+        rescue ex : JSON::ParseException | KeyError | ArgumentError | TypeCastError | OverflowError
+          context.response.status_code = 400
+          context.response.content_type = "application/json"
+          context.response.print({"error" => "Invalid request: #{ex.message}"}.to_json)
+        end
       else
         context.response.status_code = 405
         context.response.content_type = "application/json"
@@ -626,29 +627,70 @@ module CogServer
       end
     end
 
+    private def atom_entry(atom : AtomSpace::Atom)
+      {
+        "handle"      => atom.handle,
+        "type"        => atom.type.to_s,
+        "name"        => atom.node? ? atom.name : nil,
+        "outgoing"    => atom.link? ? atom.outgoing.map(&.handle) : nil,
+        "truth_value" => {
+          "strength"   => atom.truth_value.strength,
+          "confidence" => atom.truth_value.confidence,
+        },
+        "string" => atom.to_s,
+      }
+    end
+
+    # GET /atoms/:handle returns one atom, with its full content form under
+    # "wire"; DELETE /atoms/:handle removes it.
+    private def handle_atom_request(context, handle_text : String)
+      handle = handle_text.to_u64?
+      atom = handle.try { |h| @atomspace.get_atom(h) }
+      case context.request.method
+      when "GET"
+        context.response.content_type = "application/json"
+        if atom
+          entry = JSON.parse(atom_entry(atom).to_json).as_h
+          entry["wire"] = JSON.parse(AtomSpace::AtomWire.to_json(atom))
+          context.response.print(entry.to_json)
+        else
+          context.response.status_code = 404
+          context.response.print({"error" => "No atom with handle #{handle_text}"}.to_json)
+        end
+      when "DELETE"
+        remove_atom_response(context, atom)
+      else
+        context.response.status_code = 405
+        context.response.content_type = "application/json"
+        context.response.print({"error" => "Method not allowed"}.to_json)
+      end
+    end
+
+    private def remove_atom_response(context, atom : AtomSpace::Atom?)
+      context.response.content_type = "application/json"
+      if atom.nil?
+        context.response.status_code = 404
+        context.response.print({"error" => "No such atom"}.to_json)
+      elsif @atomspace.remove_atom(atom)
+        context.response.print({"success" => true, "removed" => atom.handle}.to_json)
+      else
+        context.response.status_code = 409
+        context.response.print({"error" => "Atom is still used by other links", "handle" => atom.handle}.to_json)
+      end
+    end
+
+    # POST /atoms takes an atom in its content form, either at the top level
+    # or under "atom". Outgoing entries are nested atoms or existing handles.
+    # Truth values merge with what is stored unless "replace" is true.
     private def handle_create_atom(context)
       begin
         body = context.request.body.try(&.gets_to_end) || ""
         data = JSON.parse(body)
 
-        type_str = data["type"].as_s
-        atom_type = AtomSpace::AtomType.parse(type_str)
-
-        if atom_type.node?
-          name = data["name"].as_s
-          atom = @atomspace.add_node(atom_type, name)
-        elsif atom_type.link?
-          outgoing_data = data["outgoing"].as_a
-          # Resolve every target before mutating the graph. Invalid handles must
-          # not silently turn a submitted relationship into an empty link.
-          outgoing = outgoing_data.map do |value|
-            handle = value.as_i64.to_u64
-            @atomspace.get_atom(handle) || raise ArgumentError.new("Unknown outgoing handle: #{handle}")
-          end
-          atom = @atomspace.add_link(atom_type, outgoing)
-        else
-          raise ArgumentError.new("Expected a concrete node or link type")
-        end
+        # Resolve every target before mutating the graph. Invalid handles must
+        # not silently turn a submitted relationship into an empty link.
+        described = AtomSpace::AtomWire.read(data["atom"]? || data) { |handle| @atomspace.get_atom(handle) }
+        atom = AtomSpace::AtomWire.intern(described, @atomspace, data["replace"]?.try(&.as_bool?) || false)
 
         response = {
           "success" => true,
