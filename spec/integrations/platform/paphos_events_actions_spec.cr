@@ -157,6 +157,16 @@ describe "Paphos events across a restart" do
   end
 end
 
+# The next value of a channel, or a failure when none comes.
+private def take(channel : Channel(T)) : T forall T
+  select
+  when value = channel.receive
+    value
+  when timeout(10.seconds)
+    raise "nothing arrived on the stream"
+  end
+end
+
 private def no_fields : Hash(String, String)
   {} of String => String
 end
@@ -255,12 +265,12 @@ describe "Paphos event stream" do
       seen = Channel(JSON::Any).new(10)
       follow = ada.follow_events { |event| seen.send(event) }
       begin
-        2.times.map { seen.receive["type"].as_s }.to_a.should eq(["atom_updates", "cognitive_state"])
+        2.times.map { take(seen)["type"].as_s }.to_a.should eq(["atom_updates", "cognitive_state"])
         server.active_streams.should eq(1)
 
         bob.publish_event("atom_updates", {"atom" => "not for ada"})
         ada.publish_event("atom_updates", {"atom" => "dog"})
-        event = seen.receive
+        event = take(seen)
         event["data"]["atom"].as_s.should eq("dog")
         event["id"].as_i64.should eq(4)
         follow.closed?.should be_false
@@ -282,10 +292,10 @@ describe "Paphos event stream" do
       seen = Channel(String).new(10)
       follow = ada.follow_events(after: first, types: ["atom_updates"]) { |event| seen.send(event["data"]["atom"].as_s) }
       begin
-        seen.receive.should eq("dog")
+        take(seen).should eq("dog")
         ada.publish_event("cognitive_state", {"mood" => "busy"})
         ada.publish_event("atom_updates", {"atom" => "owl"})
-        seen.receive.should eq("owl")
+        take(seen).should eq("owl")
       ensure
         follow.close
       end
@@ -516,14 +526,14 @@ describe "PaphosBackend::Connector commands and events" do
       stream.follow_events { |event| seen.send(event) }.should be_true
       stream.following?.should be_true
 
-      first = seen.receive
+      first = take(seen)
       first["type"].should eq("atom_updates")
       first["atom"].should eq("cat")
 
       # Types outside the subscriptions are left out.
       other.publish_event("unrelated", {"n" => "1"})
       other.publish_event("cognitive_state", {"mood" => "calm"})
-      seen.receive["mood"].should eq("calm")
+      take(seen)["mood"].should eq("calm")
       stream.last_event_id.should eq(3)
       # What the block saw is not handed out again.
       stream.consume_events.should be_empty

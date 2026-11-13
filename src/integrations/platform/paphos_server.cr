@@ -650,15 +650,17 @@ module PaphosBackend
       response.content_type = "text/event-stream"
       response.headers["Cache-Control"] = "no-cache"
       response.headers["X-Accel-Buffering"] = "no"
-      response.print ": stream open\n\n"
-      response.flush
 
+      # Counted before the first write, so a client that has the response
+      # can rely on the count.
       @active_streams += 1
       last_write = Time.monotonic
       # The id the next event gets, as of the last look: nothing is
       # searched while it stands still.
       looked_at = 0_i64
       begin
+        response.print ": stream open\n\n"
+        response.flush
         until @stopped
           upcoming = @store.next_event_id
           pending = upcoming == looked_at ? [] of Event : events_for(user.id, after, types, EVENT_LIMIT)
