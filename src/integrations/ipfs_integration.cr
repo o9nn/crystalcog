@@ -8,6 +8,8 @@
 require "http/client"
 require "json"
 require "digest"
+require "base64"
+require "http/formdata"
 
 module CrystalCog
   module Integrations
@@ -544,6 +546,73 @@ module CrystalCog
         response.try { |r| r["Version"]?.try(&.as_s) } || "unknown"
       end
 
+      # Pubsub (Kubo RPC). Topics and payloads travel multibase-encoded:
+      # "u" followed by unpadded base64url.
+      def self.multibase(data : String | Bytes) : String
+        "u" + Base64.urlsafe_encode(data, padding: false)
+      end
+
+      def self.multibase_decode(text : String) : Bytes
+        raise ArgumentError.new("unsupported multibase prefix in #{text.inspect}") unless text.starts_with?('u')
+        Base64.decode(text[1..])
+      end
+
+      # Publish `message` to a pubsub topic.
+      def pubsub_publish(topic : String, message : String) : Bool
+        io = IO::Memory.new
+        builder = HTTP::FormData::Builder.new(io)
+        builder.file("file", IO::Memory.new(message))
+        builder.finish
+
+        url = build_url("pubsub/pub", {"arg" => IPFSClient.multibase(topic)})
+        response = create_client.post(url, headers: HTTP::Headers{"Content-Type" => builder.content_type}, body: io.to_s)
+        response.status_code == 200
+      rescue
+        false
+      end
+
+      # Open the streaming subscription to a topic. Returns the HTTP client
+      # carrying the stream (close it to unsubscribe); the block gets each
+      # message's payload and the sending peer's id until the stream ends.
+      def pubsub_subscribe(topic : String, &block : String, String -> Nil) : HTTP::Client
+        client = HTTP::Client.new(@config.api_host, @config.api_port)
+        client.connect_timeout = @config.timeout
+        # The stream is idle between messages, so reads must not time out.
+        url = build_url("pubsub/sub", {"arg" => IPFSClient.multibase(topic)})
+        spawn do
+          begin
+            client.post(url) do |response|
+              next unless response.status_code == 200
+              response.body_io.each_line do |line|
+                next if line.strip.empty?
+                begin
+                  event = JSON.parse(line)
+                  payload = String.new(IPFSClient.multibase_decode(event["data"].as_s))
+                  block.call(payload, event["from"]?.try(&.as_s?) || "")
+                rescue JSON::ParseException | KeyError | ArgumentError | Base64::Error | TypeCastError
+                  # A malformed event does not end the subscription.
+                end
+              end
+            end
+          rescue IO::Error | Socket::Error
+            # Closed by unsubscribe, or the daemon went away.
+          end
+        end
+        client
+      end
+
+      # Topics this node is subscribed to.
+      def pubsub_topics : Array(String)
+        result = api_request("pubsub/ls")
+        names = result.try(&.["Strings"]?).try(&.as_a?) || [] of JSON::Any
+        names.compact_map do |name|
+          text = name.as_s? || next
+          text.starts_with?('u') ? String.new(IPFSClient.multibase_decode(text)) : text
+        end
+      rescue
+        [] of String
+      end
+
       private def api_request(endpoint : String, params : Hash(String, String)? = nil) : JSON::Any?
         url = build_url(endpoint, params)
         response = create_client.post(url)
@@ -931,43 +1000,32 @@ module CrystalCog
     # IPFS Pubsub for real-time sync
     class IPFSPubsub
       @client : IPFSClient
-      @subscriptions : Hash(String, Channel(String))
+      @subscriptions : Hash(String, HTTP::Client)
 
       def initialize(@client : IPFSClient)
-        @subscriptions = {} of String => Channel(String)
+        @subscriptions = {} of String => HTTP::Client
       end
 
-      # Subscribe to a topic
+      # Subscribe to a topic; the block gets every message published to it,
+      # by this node or by its peers.
       def subscribe(topic : String, &block : String -> Nil)
-        channel = Channel(String).new(100)
-        @subscriptions[topic] = channel
-
-        spawn do
-          # Note: This would need actual streaming implementation
-          # IPFS pubsub sub is a streaming endpoint
-          loop do
-            message = channel.receive
-            block.call(message)
-          end
-        end
+        unsubscribe(topic)
+        @subscriptions[topic] = @client.pubsub_subscribe(topic) { |message, _from| block.call(message) }
       end
 
       # Publish to a topic
       def publish(topic : String, message : String) : Bool
-        # IPFS pubsub pub endpoint
-        io = IO::Memory.new
-        builder = HTTP::FormData::Builder.new(io)
-        builder.file("file", IO::Memory.new(message))
-        builder.finish
+        @client.pubsub_publish(topic, message)
+      end
 
-        # This would need actual implementation
-        true
+      def subscribed?(topic : String) : Bool
+        @subscriptions.has_key?(topic)
       end
 
       # Unsubscribe from topic
       def unsubscribe(topic : String)
-        if channel = @subscriptions.delete(topic)
-          channel.close
+        if stream = @subscriptions.delete(topic)
+          stream.close
         end
       end
     end
